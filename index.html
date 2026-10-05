@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Starting Strength trainer with plate math, rest timer and saved progress.">
+<meta name="theme-color" content="#d6492f" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131110" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GitFit">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="icon-512.png" sizes="512x512" type="image/png">
+<style>
+  /* reset mirroring the hosted-artifact skeleton, so behaviour matches the preview */
+  html{color-scheme:light}
+  :root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+  body{margin:0}
+  img{max-width:100%}
+  [hidden]{display:none!important}
+</style>
+<title>GitFit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: mobile-first single column; sticky header + segmented nav; screens toggled with [hidden]; fixed rest-timer bar while running. */
+:root{
+  --bg:#f1efe9; --surface:#ffffff; --surface-2:#eceae2; --raise:#f8f6f1;
+  --fg:#1b1917; --muted:#6c675d; --faint:#938d81; --line:#dbd6cc;
+  --accent:#d6492f; --accent-press:#b73c25; --on-accent:#fff6ef;
+  --good:#1c8a56; --warn:#b5810d; --bad:#cf4634;
+  --chart-surface:#fcfcfb; --chart-ink:#0b0b0b; --chart-ink-2:#52514e; --chart-grid:#e7e3da;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4;
+  --radius:12px; --shadow:0 1px 2px rgba(20,16,12,.06),0 2px 10px rgba(20,16,12,.05);
+  --f-disp:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#131110; --surface:#1d1a17; --surface-2:#262220; --raise:#232019;
+  --fg:#f4f1ea; --muted:#a39c8f; --faint:#7b746a; --line:#332e28;
+  --accent:#e4572e; --accent-press:#f06a42; --on-accent:#17120e;
+  --good:#39b57e; --warn:#e0a400; --bad:#e46a58;
+  --chart-surface:#1a1a19; --chart-ink:#ffffff; --chart-ink-2:#c3c2b7; --chart-grid:#312d27;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#131110; --surface:#1d1a17; --surface-2:#262220; --raise:#232019;
+  --fg:#f4f1ea; --muted:#a39c8f; --faint:#7b746a; --line:#332e28;
+  --accent:#e4572e; --accent-press:#f06a42; --on-accent:#17120e;
+  --good:#39b57e; --warn:#e0a400; --bad:#e46a58;
+  --chart-surface:#1a1a19; --chart-ink:#ffffff; --chart-ink-2:#c3c2b7; --chart-grid:#312d27;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5;-webkit-text-size-adjust:100%}
+body.has-timer .screen{padding-bottom:84px}
+h1,h2,h3{font-family:var(--f-disp);font-weight:600;text-wrap:balance;margin:0;letter-spacing:.2px}
+button{font-family:inherit;color:inherit;cursor:pointer}
+input,select{font-family:inherit;font-size:16px}
+.num{font-variant-numeric:tabular-nums}
+
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 16px 8px}
+.brand{display:flex;align-items:center;gap:9px;margin-right:auto}
+.mark{width:22px;height:22px;flex:none}
+.brand b{font-family:var(--f-disp);font-weight:700;font-size:20px;letter-spacing:.5px;text-transform:uppercase}
+.nav{display:flex;gap:2px;padding:0 10px 9px;overflow-x:auto;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav button{flex:1 1 0;min-width:72px;border:0;background:transparent;color:var(--muted);font-weight:600;font-size:13px;letter-spacing:.3px;text-transform:uppercase;padding:8px 6px;border-radius:9px}
+.nav button[aria-current="true"]{background:var(--surface);color:var(--fg);box-shadow:var(--shadow)}
+.theme-btn{border:1px solid var(--line);background:var(--surface);border-radius:9px;width:34px;height:30px;font-size:15px;line-height:1;display:grid;place-items:center}
+
+.screen{max-width:560px;margin:0 auto;padding:16px 16px 40px;padding-block:16px 40px}
+.eyebrow{font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:var(--faint);font-weight:600}
+.h-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:14px}
+.h-top h1{font-size:30px;line-height:1}
+.h-top .date{color:var(--muted);font-size:13px;text-align:right}
+.phase-pill{display:inline-block;margin-top:5px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);border:1px solid var(--line);border-radius:100px;padding:2px 9px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.card+.card{margin-top:12px}
+.ex-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line)}
+.ex-head .n{display:flex;align-items:baseline;gap:9px;min-width:0}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;transform:translateY(1px)}
+.ex-head h2{font-size:21px;text-transform:uppercase;letter-spacing:.4px}
+.ex-head .scheme{font-family:var(--f-disp);font-size:19px;color:var(--muted);font-weight:500;white-space:nowrap}
+.ex-head .scheme b{color:var(--fg);font-weight:600}
+
+.setlist{padding:4px 7px 9px}
+.seth{display:flex;align-items:center;gap:10px;padding:9px 8px 5px;color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:600}
+.row{display:flex;align-items:center;gap:11px;padding:7px 8px;border-radius:10px}
+.row+.row{margin-top:1px}
+.row.warm{color:var(--muted)}
+.chk{width:30px;height:30px;flex:none;border-radius:8px;border:2px solid var(--line);background:var(--surface-2);display:grid;place-items:center;color:transparent;font-size:16px;font-weight:700;transition:.12s}
+.row.done .chk{background:var(--good);border-color:var(--good);color:#fff}
+.row.done .lbl{text-decoration:line-through;text-decoration-color:var(--faint);opacity:.6}
+.row .lbl{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px}
+.row .lbl .set{font-weight:600;font-size:14px}
+.row .lbl .reps{color:var(--muted);font-size:13px}
+.row .wt{font-family:var(--f-disp);font-size:23px;font-weight:600;letter-spacing:.3px}
+.row .wt small{font-size:12px;font-family:var(--f-body);color:var(--muted);font-weight:500;margin-left:2px}
+.row .wt.bw{font-size:16px;color:var(--muted);font-weight:500;font-family:var(--f-body)}
+.restbtn{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;padding:6px 9px;flex:none}
+
+.plateview{padding:12px 15px;background:var(--raise);border-top:1px solid var(--line)}
+.plate-wrap{display:flex;align-items:center;gap:1px;min-height:62px;overflow-x:auto;padding-bottom:2px}
+.collar{width:11px;height:16px;border-radius:2px;background:linear-gradient(var(--faint),var(--muted));flex:none;margin:0 2px}
+.barstub{height:7px;width:26px;background:linear-gradient(var(--muted),var(--faint));border-radius:3px;flex:none}
+.plate{flex:none;width:17px;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--f-disp);font-weight:700;font-size:12px;writing-mode:vertical-rl;text-orientation:mixed;letter-spacing:.5px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);border:1px solid rgba(0,0,0,.15)}
+.plate.lite{color:#1b1917;text-shadow:0 1px 0 rgba(255,255,255,.4)}
+.plate-none{color:var(--muted);font-size:13px;padding:8px 2px}
+.plate-legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:9px;font-size:12px;color:var(--muted)}
+.plate-legend .perside{color:var(--fg);font-weight:600}
+.remainder{color:var(--bad);font-weight:600}
+
+.btn{display:block;width:100%;border:0;border-radius:11px;padding:14px;font-family:var(--f-disp);font-weight:600;font-size:19px;letter-spacing:.5px;text-transform:uppercase;background:var(--accent);color:var(--on-accent)}
+.btn:active{background:var(--accent-press)}
+.btn.ghost{background:var(--surface);color:var(--fg);border:1px solid var(--line);box-shadow:var(--shadow)}
+.btn.sm{font-size:14px;padding:10px}
+.spacer{height:16px}
+
+.rev-row{display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid var(--line)}
+.rev-row:last-of-type{border-bottom:0}
+.rev-row .rn{flex:1;min-width:0}
+.rev-row .rn b{font-family:var(--f-disp);font-size:19px;font-weight:600;text-transform:uppercase;display:block}
+.rev-row .rn span{color:var(--muted);font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;flex:none}
+.seg button{border:0;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;padding:8px 11px}
+.seg button[aria-pressed="true"].hit{background:var(--good);color:#fff}
+.seg button[aria-pressed="true"].miss{background:var(--bad);color:#fff}
+
+.calc-input{display:flex;gap:10px;align-items:stretch;margin-bottom:12px}
+.calc-input input{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:0 16px;font-family:var(--f-disp);font-weight:600;font-size:34px;color:var(--fg);text-align:center}
+.calc-input .unit{display:grid;place-items:center;padding:0 16px;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;font-family:var(--f-disp);font-size:18px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:100px;padding:7px 13px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px}
+.chip .dot{width:8px;height:8px}
+.chip[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.calc-big{padding:20px 16px;text-align:center}
+.calc-big .tot{font-family:var(--f-disp);font-weight:700;font-size:52px;line-height:.95}
+.calc-big .tot small{font-size:20px;color:var(--muted);font-weight:500}
+.calc-big .sub{color:var(--muted);font-size:13px;margin-top:2px}
+
+.chartcard{padding:14px 12px 10px;background:var(--chart-surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.chartcard+.chartcard{margin-top:12px}
+.chartcard h3{color:var(--chart-ink);font-size:18px;padding:0 4px 2px;text-transform:uppercase;letter-spacing:.4px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;padding:4px 4px 8px}
+.legend span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--chart-ink-2);font-weight:500}
+.legend i{width:11px;height:3px;border-radius:2px;display:block}
+.chart{width:100%;height:auto;display:block;touch-action:pan-y}
+.read{min-height:20px;padding:6px 6px 2px;color:var(--chart-ink-2);font-size:12px;text-align:center}
+.read b{color:var(--chart-ink)}
+.sess{display:flex;align-items:center;gap:10px;padding:11px 14px}
+.sess+.sess{border-top:1px solid var(--line)}
+.sess .badge{width:30px;height:30px;flex:none;border-radius:8px;background:var(--surface-2);display:grid;place-items:center;font-family:var(--f-disp);font-weight:700;font-size:16px}
+.sess .sd{flex:1;min-width:0}
+.sess .sd .dt{font-size:12px;color:var(--muted)}
+.sess .sd .lf{font-size:13.5px;display:flex;flex-wrap:wrap;gap:3px 10px;margin-top:1px}
+.sess .sd .lf i{font-style:normal;white-space:nowrap}
+.sess .sd .lf .x{color:var(--bad)}
+.empty{text-align:center;color:var(--muted);padding:34px 20px;font-size:14px}
+
+.bw-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 15px}
+.bw-head .big{font-family:var(--f-disp);font-weight:700;font-size:40px;line-height:.9}
+.bw-head .big small{font-size:17px;color:var(--muted);font-weight:500}
+.bw-head .sub{color:var(--muted);font-size:12px}
+.bw-entry{display:flex;gap:9px;padding:0 15px 14px}
+.bw-entry input{flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--fg);font-family:var(--f-disp);font-weight:600;font-size:20px;text-align:center}
+.bw-entry button{flex:none;border:0;border-radius:10px;padding:0 18px;background:var(--accent);color:var(--on-accent);font-family:var(--f-disp);font-weight:600;font-size:16px;text-transform:uppercase;letter-spacing:.4px}
+
+.set-group{padding:6px 15px 14px}
+.field{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.field:last-child{border-bottom:0}
+.field label{flex:1;min-width:0;font-weight:500}
+.field label small{display:block;color:var(--muted);font-weight:400;font-size:12px}
+.field input[type=number]{width:92px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:9px 10px;color:var(--fg);text-align:right;font-family:var(--f-disp);font-weight:600;font-size:18px}
+.segsm{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.segsm button{border:0;background:var(--surface-2);color:var(--muted);padding:8px 14px;font-weight:600;font-size:14px}
+.segsm button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.switch{width:50px;height:30px;border-radius:100px;border:1px solid var(--line);background:var(--surface-2);position:relative;flex:none;transition:.15s}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:var(--faint);transition:.15s}
+.switch[aria-pressed="true"]{background:var(--accent);border-color:var(--accent)}
+.switch[aria-pressed="true"]::after{left:22px;background:#fff}
+.sect-title{font-family:var(--f-disp);font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--faint);padding:16px 2px 7px}
+.phase-opt{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--surface-2);border-radius:11px;padding:12px 14px;margin-bottom:9px}
+.phase-opt[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--surface))}
+.phase-opt b{font-family:var(--f-disp);font-size:17px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+.phase-opt .tick{margin-left:auto;color:var(--accent);font-weight:700;opacity:0}
+.phase-opt[aria-pressed="true"] .tick{opacity:1}
+.phase-opt span{display:block;color:var(--muted);font-size:12.5px;margin-top:3px}
+.barchips{display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 0}
+.barchips button{border:1px solid var(--line);background:var(--surface-2);border-radius:100px;padding:6px 12px;font-family:var(--f-disp);font-weight:600;font-size:15px}
+.barchips button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+textarea{width:100%;min-height:90px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--fg);font-family:ui-monospace,Menlo,monospace;font-size:12px;resize:vertical}
+.note{color:var(--muted);font-size:12.5px;padding:4px 2px 0}
+.danger{color:var(--bad)}
+.row-btns{display:flex;gap:9px}
+.row-btns .btn{flex:1}
+
+#timerbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -4px 16px rgba(0,0,0,.12);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px))}
+#timerbar .tinner{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:12px}
+#timerbar .tt{font-family:var(--f-disp);font-weight:700;font-size:38px;line-height:1;letter-spacing:1px;width:112px;color:var(--accent)}
+#timerbar .tt.done{color:var(--good)}
+#timerbar .presets{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+#timerbar .presets button{border:1px solid var(--line);background:var(--surface-2);border-radius:8px;padding:7px 10px;font-weight:600;font-size:13px}
+#timerbar .tx{border:1px solid var(--line);background:var(--surface-2);border-radius:8px;width:38px;height:38px;font-size:17px;flex:none;display:grid;place-items:center}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<header>
+  <div class="bar">
+    <span class="brand">
+      <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="var(--accent)" stroke-width="2.1" stroke-linecap="round"><path d="M3 12h18"/><path d="M5 8v8M5 8h2.6M5 16h2.6"/><path d="M19 8v8M19 8h-2.6M19 16h-2.6"/></g></svg>
+      <b>GitFit</b>
+    </span>
+    <button class="theme-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle light or dark">◐</button>
+  </div>
+  <nav class="nav" id="nav">
+    <button data-s="today" aria-current="true">Today</button>
+    <button data-s="plates">Plates</button>
+    <button data-s="history">History</button>
+    <button data-s="settings">Settings</button>
+  </nav>
+</header>
+
+<main>
+  <section class="screen" id="s-today"></section>
+  <section class="screen" id="s-plates" hidden></section>
+  <section class="screen" id="s-history" hidden></section>
+  <section class="screen" id="s-settings" hidden></section>
+</main>
+
+<div id="timerbar" hidden>
+  <div class="tinner">
+    <div class="tt num" id="tt">0:00</div>
+    <div class="presets">
+      <button data-sec="90">1:30</button>
+      <button data-sec="180">3:00</button>
+      <button data-sec="300">5:00</button>
+      <button class="tx" id="tpause" aria-label="Pause">⏸</button>
+      <button class="tx" id="tstop" aria-label="Stop">✕</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ---------- program definition ---------- */
+const META = {
+  squat:     {name:"Squat",       sets:3, reps:5,  color:"var(--s1)", bar:true},
+  press:     {name:"Press",       sets:3, reps:5,  color:"var(--s2)", bar:true},
+  bench:     {name:"Bench Press", sets:3, reps:5,  color:"var(--s3)", bar:true},
+  deadlift:  {name:"Deadlift",    sets:1, reps:5,  color:"var(--s4)", bar:true},
+  row:       {name:"Barbell Row", sets:3, reps:5,  color:"var(--s5)", bar:true},
+};
+const CHART_LIFTS = ["squat","press","bench","deadlift","row"];
+const PLAN = {
+  1:{A:["squat","press","deadlift"], B:["squat","bench","deadlift"]},
+  2:{A:["squat","press","deadlift"], B:["squat","bench","row"]},
+};
+const PLATES = {
+  lb:[{w:45,c:"#2f6fb0"},{w:35,c:"#d7a000",lite:1},{w:25,c:"#2f8f4e"},{w:10,c:"#e9e9e9",lite:1},{w:5,c:"#c23b2e"},{w:2.5,c:"#9aa0a6",lite:1},{w:1.25,c:"#5b6066",micro:1}],
+  kg:[{w:25,c:"#c23b2e"},{w:20,c:"#2f6fb0"},{w:15,c:"#d7a000",lite:1},{w:10,c:"#2f8f4e"},{w:5,c:"#e9e9e9",lite:1},{w:2.5,c:"#c23b2e"},{w:1.25,c:"#9aa0a6",lite:1},{w:0.5,c:"#5b6066",micro:1}],
+};
+const BARS = {lb:[45,35,15], kg:[20,15,10]};
+const DEFAULTS = {
+  units:"lb", bar:45, micro:false, phase:1,
+  lifts:{
+    squat:{weight:95,incr:5,fails:0},
+    press:{weight:45,incr:5,fails:0},
+    bench:{weight:65,incr:5,fails:0},
+    deadlift:{weight:135,incr:10,fails:0},
+    row:{weight:65,incr:5,fails:0},
+  },
+  history:[], bodyweight:[],
+};
+const KEY="gitfit_v1", OLD_KEY="ironledger_v1";
+
+let S = load();
+let done = {};
+let timer = null;
+
+function load(){
+  try{
+    let raw=localStorage.getItem(KEY);
+    if(!raw){ const old=localStorage.getItem(OLD_KEY); if(old){ localStorage.setItem(KEY,old); raw=old; } }
+    if(raw) return normalize(JSON.parse(raw));
+  }catch(e){}
+  return structuredClone(DEFAULTS);
+}
+function normalize(p){
+  const s=Object.assign(structuredClone(DEFAULTS), p||{});
+  s.lifts=Object.assign(structuredClone(DEFAULTS.lifts), p&&p.lifts||{});
+  if(!Array.isArray(s.history)) s.history=[];
+  if(!Array.isArray(s.bodyweight)) s.bodyweight=[];
+  if(s.phase!==2) s.phase=1;
+  return s;
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+/* ---------- pure logic ---------- */
+const plateSet = ()=> PLATES[S.units].filter(p=>!p.micro||S.micro);
+const minPlate = ()=> plateSet().slice(-1)[0].w;
+const step     = ()=> 2*minPlate();
+function roundToStep(w){ const st=step(),b=S.bar; if(w<=b) return b; return b+Math.round((w-b)/st)*st; }
+const fmt = w => (Math.round(w*100)/100).toString();
+const U = ()=>S.units;
+
+function platesFor(total){
+  const b=S.bar; let perSide=(total-b)/2; const out=[];
+  if(perSide<=0) return {plates:[], remainder:0, perSide:0};
+  for(const p of plateSet()){
+    let n=0; while(perSide>=p.w-1e-9){ perSide=Math.round((perSide-p.w)*100)/100; n++; }
+    if(n) out.push({w:p.w,c:p.c,lite:p.lite,count:n});
+  }
+  return {plates:out, remainder:Math.round(perSide*100)/100, perSide:(total-b)/2};
+}
+function warmups(work){
+  const b=S.bar, out=[{weight:b,reps:5,sets:2,warm:true}];
+  if(work<=b) return out;
+  let prev=b;
+  for(const g of [{p:.4,r:5},{p:.6,r:3},{p:.8,r:2}]){
+    const w=roundToStep(work*g.p);
+    if(w>prev+1e-9 && w<work-1e-9){ out.push({weight:w,reps:g.r,sets:1,warm:true}); prev=w; }
+  }
+  return out;
+}
+const todayType = ()=> (S.history.length%2===0) ? "A" : "B";
+const plan      = ()=> PLAN[S.phase][todayType()];
+function progress(lift, success){
+  if(success) return {weight:lift.weight+lift.incr, fails:0, deloaded:false};
+  const f=(lift.fails||0)+1;
+  if(f>=3) return {weight:roundToStep(lift.weight*0.9), fails:0, deloaded:true};
+  return {weight:lift.weight, fails:f, deloaded:false};
+}
+
+/* ---------- helpers ---------- */
+const $ = s=>document.querySelector(s);
+const el=(t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e;};
+const sameDay=(a,b)=>{const x=new Date(a),y=new Date(b);return x.getFullYear()===y.getFullYear()&&x.getMonth()===y.getMonth()&&x.getDate()===y.getDate();};
+function getCSS(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function cssColor(ref){const m=ref.match(/--[\w-]+/);return m?getCSS(m[0]):ref;}
+
+function plateStripHTML(total){
+  const {plates,remainder}=platesFor(total);
+  if(plates.length===0 && remainder===0)
+    return `<div class="plateview"><div class="plate-none">Empty bar — ${fmt(S.bar)} ${U()}</div></div>`;
+  let strip=`<span class="barstub"></span>`;
+  const maxW=plateSet()[0].w;
+  for(const p of plates){ const h=34+24*(p.w/maxW);
+    for(let i=0;i<p.count;i++) strip+=`<span class="plate${p.lite?' lite':''}" style="background:${p.c};height:${h}px">${fmt(p.w)}</span>`;
+  }
+  strip+=`<span class="collar"></span>`;
+  let legend=plates.map(p=>`<span><span class="perside">${p.count}×</span> ${fmt(p.w)}</span>`).join("");
+  if(remainder>0) legend+=`<span class="remainder">+${fmt(remainder)} unloadable</span>`;
+  return `<div class="plateview"><div class="plate-wrap">${strip}</div>
+    <div class="plate-legend"><span class="perside" style="color:var(--muted)">Per side:</span>${legend}</div></div>`;
+}
+
+/* ---------- Today ---------- */
+function renderToday(){
+  const type=todayType(), d=new Date(), wrap=$("#s-today"); wrap.innerHTML="";
+  const head=el("div","h-top");
+  head.innerHTML=`<div><div class="eyebrow">Starting Strength</div><h1>Workout ${type}</h1>
+      <span class="phase-pill">Phase ${S.phase} · ${S.phase===1?'Linear progression':'Cleans & chins'}</span></div>
+    <div class="date">${d.toLocaleDateString(undefined,{weekday:"short"})}<br>${d.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</div>`;
+  wrap.appendChild(head);
+
+  plan().forEach(key=>{
+    const M=META[key];
+    const card=el("div","card");
+    let idx=0, list;
+    if(M.bar){
+      const lift=S.lifts[key], work=lift.weight;
+      card.innerHTML=`<div class="ex-head"><div class="n"><span class="dot" style="background:${M.color}"></span><h2>${M.name}</h2></div>
+        <div class="scheme">${M.sets}×${M.reps} <b class="num">${fmt(work)}</b><small> ${U()}</small></div></div>`;
+      list=el("div","setlist");
+      list.appendChild(el("div","seth","Warm-up"));
+      warmups(work).forEach(w=>{
+        const rid=`${key}_${idx++}`;
+        const r=el("div","row warm"+(done[rid]?" done":"")); r.dataset.rid=rid;
+        r.innerHTML=`<button class="chk" aria-label="done">✓</button>
+          <div class="lbl"><span class="set">${w.sets>1?w.sets+" × "+w.reps:w.reps+" reps"}</span>${w.sets>1?'<span class="reps">sets</span>':''}</div>
+          <div class="wt num">${fmt(w.weight)}<small>${U()}</small></div>
+          <button class="restbtn" data-sec="60">Rest</button>`;
+        list.appendChild(r);
+      });
+      list.appendChild(el("div","seth",`Work sets · ${M.reps} reps`));
+      for(let i=0;i<M.sets;i++){
+        const rid=`${key}_${idx++}`;
+        const r=el("div","row"+(done[rid]?" done":"")); r.dataset.rid=rid;
+        r.innerHTML=`<button class="chk" aria-label="done">✓</button>
+          <div class="lbl"><span class="set">Set ${i+1}</span><span class="reps">${M.reps} reps</span></div>
+          <div class="wt num">${fmt(work)}<small>${U()}</small></div>
+          <button class="restbtn" data-sec="180">Rest</button>`;
+        list.appendChild(r);
+      }
+      card.appendChild(list);
+      card.insertAdjacentHTML("beforeend", plateStripHTML(work));
+    } else {
+      card.innerHTML=`<div class="ex-head"><div class="n"><span class="dot" style="background:${M.color}"></span><h2>${M.name}</h2></div>
+        <div class="scheme">${M.sets} × AMRAP</div></div>`;
+      list=el("div","setlist");
+      list.appendChild(el("div","seth","Work sets · to failure"));
+      for(let i=0;i<M.sets;i++){
+        const rid=`${key}_${idx++}`;
+        const r=el("div","row"+(done[rid]?" done":"")); r.dataset.rid=rid;
+        r.innerHTML=`<button class="chk" aria-label="done">✓</button>
+          <div class="lbl"><span class="set">Set ${i+1}</span><span class="reps">as many as possible</span></div>
+          <div class="wt bw">bodyweight</div>
+          <button class="restbtn" data-sec="120">Rest</button>`;
+        list.appendChild(r);
+      }
+      card.appendChild(list);
+    }
+    wrap.appendChild(card);
+  });
+
+  wrap.appendChild(el("div","spacer"));
+  const fin=el("button","btn"); fin.textContent="Finish workout"; fin.onclick=openReview;
+  wrap.appendChild(fin);
+}
+
+function openReview(){
+  const type=todayType(), wrap=$("#s-today"); wrap.innerHTML="";
+  wrap.innerHTML=`<div class="h-top"><div><div class="eyebrow">Log results</div><h1>Workout ${type}</h1></div></div>`;
+  wrap.appendChild(el("p","note","Hit every rep and the weight climbs next time. Miss reps three sessions running and the lift deloads 10%."));
+  const card=el("div","card"); const picks={};
+  plan().forEach(key=>{
+    const M=META[key]; picks[key]=true;
+    const row=el("div","rev-row");
+    let sub;
+    if(M.bar){ const lift=S.lifts[key]; const nx=progress(lift,true);
+      sub=`<span class="num">${M.sets}×${M.reps} @ ${fmt(lift.weight)} ${U()} → next <b class="nx num">${fmt(nx.weight)}</b></span>`;
+    } else sub=`<span>${M.sets} × to failure · bodyweight</span>`;
+    row.innerHTML=`<span class="dot" style="background:${M.color}"></span>
+      <div class="rn"><b>${M.name}</b>${sub}</div>
+      <div class="seg" role="group">
+        <button class="hit" aria-pressed="true" data-k="${key}" data-v="1">Done</button>
+        <button class="miss" aria-pressed="false" data-k="${key}" data-v="0">Missed</button></div>`;
+    card.appendChild(row);
+    row.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{
+      const k=b.dataset.k, v=b.dataset.v==="1"; picks[k]=v;
+      row.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",(x.dataset.v==="1")===v?"true":"false"));
+      if(META[k].bar){ const nx=progress(S.lifts[k],v); row.querySelector(".nx").textContent=fmt(nx.weight); }
+    });
+  });
+  wrap.appendChild(card); wrap.appendChild(el("div","spacer"));
+  const saveBtn=el("button","btn"); saveBtn.textContent="Save & advance"; saveBtn.onclick=()=>commit(type,picks);
+  const back=el("button","btn ghost sm"); back.textContent="Back"; back.style.marginTop="9px"; back.onclick=()=>{renderToday();window.scrollTo(0,0);};
+  wrap.appendChild(saveBtn); wrap.appendChild(back);
+}
+
+function commit(type,picks){
+  const rec={date:Date.now(), type, phase:S.phase, units:S.units, lifts:[]};
+  plan().forEach(key=>{
+    const M=META[key], ok=picks[key]!==false;
+    if(M.bar){ const lift=S.lifts[key];
+      rec.lifts.push({key,name:M.name,weight:lift.weight,success:ok,bar:true});
+      const nx=progress(lift,ok); lift.weight=nx.weight; lift.fails=nx.fails; lift._deload=nx.deloaded;
+    } else rec.lifts.push({key,name:M.name,success:ok,bar:false});
+  });
+  S.history.push(rec); done={}; save();
+  go("today"); window.scrollTo(0,0);
+}
+
+/* ---------- Plate calculator ---------- */
+let calcVal=null;
+function renderPlates(){
+  const wrap=$("#s-plates"); wrap.innerHTML="";
+  wrap.innerHTML=`<div class="h-top"><div><div class="eyebrow">Loadout</div><h1>Plate Calculator</h1></div></div>`;
+  const inp=el("div","calc-input");
+  inp.innerHTML=`<input id="calcIn" class="num" type="number" inputmode="decimal" placeholder="${fmt(S.bar)}" value="${calcVal??''}"><div class="unit">${U()}</div>`;
+  wrap.appendChild(inp);
+  const chips=el("div","chips");
+  CHART_LIFTS.forEach(k=>{ if(S.phase===1 && k==="row") return;
+    const c=el("button","chip");
+    c.innerHTML=`<span class="dot" style="background:${META[k].color}"></span>${META[k].name} · ${fmt(S.lifts[k].weight)}`;
+    c.onclick=()=>{calcVal=S.lifts[k].weight; renderPlates();};
+    chips.appendChild(c);
+  });
+  wrap.appendChild(chips);
+  const total=(calcVal==null||calcVal==="")?S.bar:Math.max(S.bar,+calcVal);
+  const card=el("div","card");
+  card.innerHTML=`<div class="calc-big"><div class="tot num">${fmt(total)}<small> ${U()}</small></div>
+     <div class="sub">${fmt(platesFor(total).perSide)} ${U()} per side · bar ${fmt(S.bar)} ${U()}</div></div>`;
+  card.insertAdjacentHTML("beforeend", plateStripHTML(total));
+  wrap.appendChild(card);
+  const i=$("#calcIn");
+  i.oninput=()=>{ calcVal=i.value; const t=(i.value===""?S.bar:Math.max(S.bar,+i.value));
+    card.querySelector(".tot").innerHTML=`${fmt(t)}<small> ${U()}</small>`;
+    card.querySelector(".sub").textContent=`${fmt(platesFor(t).perSide)} ${U()} per side · bar ${fmt(S.bar)} ${U()}`;
+    const old=card.querySelector(".plateview");
+    old.replaceWith(document.createRange().createContextualFragment(plateStripHTML(t)).firstChild);
+  };
+}
+
+/* ---------- History ---------- */
+function renderHistory(){
+  const wrap=$("#s-history"); wrap.innerHTML="";
+  wrap.innerHTML=`<div class="h-top"><div><div class="eyebrow">Progress</div><h1>History</h1></div></div>`;
+
+  // bodyweight card
+  const bw=el("div","card");
+  const last=S.bodyweight[S.bodyweight.length-1];
+  bw.innerHTML=`<div class="bw-head">
+      <div><div class="big num">${last?fmt(last.w):'—'}<small> ${U()}</small></div>
+        <div class="sub">${last?('logged '+new Date(last.date).toLocaleDateString(undefined,{month:"short",day:"numeric"})):'Bodyweight not logged yet'}</div></div>
+    </div>
+    <div class="bw-entry"><input id="bwIn" class="num" type="number" inputmode="decimal" placeholder="Today's weight" value="${last?fmt(last.w):''}"><button id="bwLog">Log</button></div>`;
+  wrap.appendChild(bw);
+  $("#bwLog").onclick=()=>{ const v=parseFloat($("#bwIn").value); if(isNaN(v)) return;
+    if(S.bodyweight.length && sameDay(S.bodyweight[S.bodyweight.length-1].date, Date.now())) S.bodyweight[S.bodyweight.length-1].w=v;
+    else S.bodyweight.push({date:Date.now(), w:v});
+    save(); renderHistory();
+  };
+  if(S.bodyweight.length>=2){
+    const c=el("div","chartcard"); c.style.marginTop="12px";
+    c.innerHTML=`<h3>Bodyweight</h3><svg class="chart" id="bwChart" viewBox="0 0 340 150" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Bodyweight over time"></svg>`;
+    wrap.appendChild(c); drawLine("#bwChart", S.bodyweight.map((p,i)=>({i,w:p.w,date:p.date})), getCSS("--accent"), 150);
+  }
+
+  if(S.history.length===0){
+    wrap.insertAdjacentHTML("beforeend",`<div class="card" style="margin-top:12px"><div class="empty">No workouts logged yet.<br>Finish a session on the Today tab and it shows up here.</div></div>`);
+    return;
+  }
+  // working-weight chart
+  const cc=el("div","chartcard"); cc.style.marginTop="12px";
+  const lifts=CHART_LIFTS.filter(k=> S.history.some(r=>(r.lifts||[]).some(x=>x.key===k&&x.bar)));
+  cc.innerHTML=`<h3>Working weight</h3>
+    <div class="legend">${lifts.map(k=>`<span><i style="background:${cssColor(META[k].color)}"></i>${META[k].name}</span>`).join("")}</div>
+    <svg class="chart" id="chart" viewBox="0 0 340 210" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Working weight over time"></svg>
+    <div class="read" id="chartRead">Tap the chart to inspect a session</div>`;
+  wrap.appendChild(cc); drawWorkChart(lifts);
+
+  const list=el("div","card"); list.style.marginTop="12px";
+  [...S.history].reverse().forEach(r=>{
+    const s=el("div","sess");
+    const lf=(r.lifts||[]).map(x=>{ const nm=(META[x.key]?META[x.key].name:x.name).replace('Bench Press','Bench').replace('Barbell Row','Row');
+      const val=x.bar?(' '+fmt(x.weight)):''; return `<i class="${x.success?'':'x'}">${nm}${val}${x.success?'':' ✕'}</i>`; }).join("");
+    s.innerHTML=`<div class="badge">${r.type}</div><div class="sd">
+      <div class="dt">${new Date(r.date).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})} · P${r.phase||1} · ${r.units||S.units}</div>
+      <div class="lf num">${lf}</div></div>`;
+    list.appendChild(s);
+  });
+  wrap.appendChild(list);
+}
+
+function drawWorkChart(lifts){
+  const svg=$("#chart"); if(!svg) return;
+  const W=340,H=210,mL=34,mR=14,mT=10,mB=26;
+  const ink2=getCSS("--chart-ink-2"), grid=getCSS("--chart-grid");
+  const series=lifts.map(k=>{ const pts=[];
+    S.history.forEach((r,i)=>{ const hit=(r.lifts||[]).find(x=>x.key===k&&x.bar); if(hit) pts.push({i,w:hit.weight}); });
+    return {k,color:cssColor(META[k].color),pts};
+  }).filter(s=>s.pts.length);
+  const n=S.history.length;
+  let lo=Infinity,hi=-Infinity; series.forEach(s=>s.pts.forEach(p=>{lo=Math.min(lo,p.w);hi=Math.max(hi,p.w);}));
+  if(!isFinite(lo)){lo=0;hi=1;} if(lo===hi){lo-=step();hi+=step();}
+  const pad=(hi-lo)*0.12||step(); lo=Math.floor(lo-pad); hi=Math.ceil(hi+pad);
+  const X=i=> n<=1?mL+(W-mL-mR)/2:mL+(W-mL-mR)*(i/(n-1));
+  const Y=w=> mT+(H-mT-mB)*(1-(w-lo)/(hi-lo));
+  let out="";
+  for(let t=0;t<=3;t++){ const val=lo+(hi-lo)*t/3, y=Y(val);
+    out+=`<line x1="${mL}" y1="${y.toFixed(1)}" x2="${W-mR}" y2="${y.toFixed(1)}" stroke="${grid}" stroke-width="1"/>`;
+    out+=`<text x="${mL-6}" y="${(y+3.5).toFixed(1)}" fill="${ink2}" font-size="9" text-anchor="end" font-family="IBM Plex Sans,sans-serif">${Math.round(val)}</text>`;
+  }
+  const xi=[...new Set([0, n>2?Math.floor((n-1)/2):0, Math.max(0,n-1)])];
+  xi.forEach(i=>{ const r=S.history[i]; if(!r)return;
+    out+=`<text x="${X(i).toFixed(1)}" y="${H-9}" fill="${ink2}" font-size="9" text-anchor="middle" font-family="IBM Plex Sans,sans-serif">${new Date(r.date).toLocaleDateString(undefined,{month:"short",day:"numeric"})}</text>`;
+  });
+  series.forEach(s=>{
+    const dd=s.pts.map((p,j)=>`${j?'L':'M'}${X(p.i).toFixed(1)} ${Y(p.w).toFixed(1)}`).join(" ");
+    out+=`<path d="${dd}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const last=s.pts[s.pts.length-1];
+    out+=`<circle cx="${X(last.i).toFixed(1)}" cy="${Y(last.w).toFixed(1)}" r="3.4" fill="${s.color}" stroke="${getCSS('--chart-surface')}" stroke-width="1.5"/>`;
+  });
+  out+=`<line id="cx" x1="0" y1="${mT}" x2="0" y2="${H-mB}" stroke="${ink2}" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>`;
+  svg.innerHTML=out;
+  const read=$("#chartRead");
+  function pick(ev){ const rect=svg.getBoundingClientRect();
+    const cxp=((ev.touches?ev.touches[0].clientX:ev.clientX)-rect.left)/rect.width*W;
+    let bi=0,bd=1e9; for(let i=0;i<n;i++){const d=Math.abs(X(i)-cxp);if(d<bd){bd=d;bi=i;}}
+    svg.querySelector("#cx").setAttribute("x1",X(bi)); svg.querySelector("#cx").setAttribute("x2",X(bi)); svg.querySelector("#cx").setAttribute("opacity","1");
+    const r=S.history[bi];
+    read.innerHTML=`<b>${new Date(r.date).toLocaleDateString(undefined,{month:"short",day:"numeric"})} · ${r.type}</b> — `+
+      (r.lifts||[]).filter(x=>x.bar).map(x=>`${META[x.key].name.replace('Bench Press','Bench').replace('Barbell Row','Row')} <b>${fmt(x.weight)}</b>`).join(" · ");
+  }
+  svg.onpointerdown=pick; svg.onpointermove=e=>{if(e.buttons)pick(e);};
+}
+
+function drawLine(sel, pts, color, H){
+  const svg=$(sel); if(!svg) return;
+  const W=340,mL=32,mR=14,mT=10,mB=22;
+  const ink2=getCSS("--chart-ink-2"), grid=getCSS("--chart-grid");
+  const n=pts.length; let lo=Math.min(...pts.map(p=>p.w)), hi=Math.max(...pts.map(p=>p.w));
+  if(lo===hi){lo-=2;hi+=2;} const pad=(hi-lo)*0.15; lo=Math.floor(lo-pad); hi=Math.ceil(hi+pad);
+  const X=i=> n<=1?mL+(W-mL-mR)/2:mL+(W-mL-mR)*(i/(n-1));
+  const Y=w=> mT+(H-mT-mB)*(1-(w-lo)/(hi-lo));
+  let out="";
+  for(let t=0;t<=2;t++){ const val=lo+(hi-lo)*t/2, y=Y(val);
+    out+=`<line x1="${mL}" y1="${y.toFixed(1)}" x2="${W-mR}" y2="${y.toFixed(1)}" stroke="${grid}" stroke-width="1"/>`;
+    out+=`<text x="${mL-6}" y="${(y+3.5).toFixed(1)}" fill="${ink2}" font-size="9" text-anchor="end" font-family="IBM Plex Sans,sans-serif">${Math.round(val)}</text>`;
+  }
+  [0,n-1].forEach(i=>{ out+=`<text x="${X(i).toFixed(1)}" y="${H-7}" fill="${ink2}" font-size="9" text-anchor="middle" font-family="IBM Plex Sans,sans-serif">${new Date(pts[i].date).toLocaleDateString(undefined,{month:"short",day:"numeric"})}</text>`; });
+  const dd=pts.map((p,j)=>`${j?'L':'M'}${X(j).toFixed(1)} ${Y(p.w).toFixed(1)}`).join(" ");
+  out+=`<path d="${dd}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const l=pts[n-1]; out+=`<circle cx="${X(n-1).toFixed(1)}" cy="${Y(l.w).toFixed(1)}" r="3.4" fill="${color}" stroke="${getCSS('--chart-surface')}" stroke-width="1.5"/>`;
+  svg.innerHTML=out;
+}
+
+/* ---------- Settings ---------- */
+function renderSettings(){
+  const wrap=$("#s-settings"); wrap.innerHTML="";
+  wrap.innerHTML=`<div class="h-top"><div><div class="eyebrow">Configure</div><h1>Settings</h1></div></div>`;
+
+  // phase
+  const ph=el("div","card");
+  ph.innerHTML=`<div class="sect-title" style="padding-left:15px">Program phase</div>
+    <div class="set-group">
+      <button class="phase-opt" data-ph="1" aria-pressed="${S.phase===1}"><b>Phase 1 <span class="tick">✓</span></b>
+        <span>Squat, press/bench and deadlift every session. The basic novice linear progression.</span></button>
+      <button class="phase-opt" data-ph="2" aria-pressed="${S.phase===2}"><b>Phase 2 <span class="tick">✓</span></b>
+        <span>Swaps the B-day deadlift for barbell rows (3×5), keeping deadlift on A days. Switch when deadlift triples get too heavy to recover from session to session.</span></button>
+    </div>`;
+  wrap.appendChild(ph);
+  ph.querySelectorAll("[data-ph]").forEach(b=>b.onclick=()=>{ S.phase=+b.dataset.ph; save(); renderSettings(); });
+
+  // lifts
+  const prog=el("div","card"); prog.style.marginTop="12px";
+  prog.innerHTML=`<div class="sect-title" style="padding-left:15px">Lifts — current weight &amp; jump</div>`;
+  const g=el("div","set-group");
+  CHART_LIFTS.forEach(k=>{ const M=META[k], lift=S.lifts[k];
+    const f=el("div","field");
+    f.innerHTML=`<label><span style="color:${M.color}">●</span> ${M.name}
+        <small>${k==="row"?"Phase 2 · ":""}${lift.fails?('⚠ '+lift.fails+' missed in a row'):'on track'}</small></label>
+      <input type="number" step="${S.micro?1.25:2.5}" data-k="${k}" data-f="weight" value="${fmt(lift.weight)}" aria-label="${M.name} weight">
+      <input type="number" step="2.5" data-k="${k}" data-f="incr" value="${fmt(lift.incr)}" aria-label="${M.name} increment" style="width:62px">`;
+    g.appendChild(f);
+  });
+  prog.appendChild(g); wrap.appendChild(prog);
+
+  // equipment
+  const eq=el("div","card"); eq.style.marginTop="12px";
+  eq.innerHTML=`<div class="sect-title" style="padding-left:15px">Equipment</div>`;
+  const g2=el("div","set-group");
+  const barField=el("div","field");
+  barField.innerHTML=`<label>Bar weight<small>Drives every plate calculation</small></label>
+     <input type="number" id="setBar" value="${fmt(S.bar)}" step="0.5">`;
+  g2.appendChild(barField);
+  const barChips=el("div","barchips"); barChips.style.padding="2px 0 10px";
+  BARS[S.units].forEach(b=>{ const btn=el("button",null,`${b} ${U()}`); btn.setAttribute("aria-pressed", S.bar===b);
+    btn.onclick=()=>{S.bar=b; save(); renderSettings(); refreshAll();}; barChips.appendChild(btn); });
+  g2.appendChild(barChips);
+  g2.insertAdjacentHTML("beforeend",`
+    <div class="field"><label>Units<small>Switching changes plates &amp; bar — it won't convert logged numbers</small></label>
+      <div class="segsm"><button data-u="lb" aria-pressed="${U()==='lb'}">lb</button><button data-u="kg" aria-pressed="${U()==='kg'}">kg</button></div></div>
+    <div class="field"><label>Micro plates<small>${S.units==='lb'?'1.25 lb':'0.5 kg'} available</small></label>
+      <button class="switch" id="setMicro" aria-pressed="${S.micro}" aria-label="Micro plates"></button></div>`);
+  eq.appendChild(g2); wrap.appendChild(eq);
+
+  // backup
+  const bk=el("div","card"); bk.style.marginTop="12px";
+  bk.innerHTML=`<div class="sect-title" style="padding-left:15px">Backup &amp; data</div>
+    <div class="set-group">
+      <p class="note">Your log lives in this browser only. Copy a backup to move it to another device or browser, then paste it there to restore.</p>
+      <div class="row-btns" style="margin:8px 0 10px"><button class="btn ghost sm" id="btnCopy">Copy backup</button><button class="btn ghost sm" id="btnPaste">Restore</button></div>
+      <textarea id="backupBox" placeholder="Paste a backup here, then tap Restore" aria-label="Backup data"></textarea>
+      <div class="spacer"></div>
+      <button class="btn ghost sm danger" id="btnReset">Reset all data</button>
+    </div>`;
+  wrap.appendChild(bk);
+
+  wrap.querySelectorAll('input[data-k]').forEach(i=>i.onchange=()=>{ const v=parseFloat(i.value); if(!isNaN(v)){S.lifts[i.dataset.k][i.dataset.f]=v; save();} });
+  wrap.querySelectorAll('[data-u]').forEach(b=>b.onclick=()=>{ S.units=b.dataset.u; S.bar=(S.units==='kg')?20:45; save(); renderSettings(); refreshAll(); });
+  $("#setBar").onchange=e=>{const v=parseFloat(e.target.value); if(!isNaN(v)){S.bar=v; save(); renderSettings(); refreshAll();}};
+  $("#setMicro").onclick=e=>{S.micro=!S.micro; save(); renderSettings(); refreshAll();};
+  $("#btnCopy").onclick=async e=>{ const data=JSON.stringify(S);
+    try{ await navigator.clipboard.writeText(data); e.target.textContent="Copied ✓"; setTimeout(()=>e.target.textContent="Copy backup",1500);}
+    catch(err){ const t=$("#backupBox"); t.value=data; t.focus(); t.select(); e.target.textContent="Selected — copy it"; } };
+  $("#btnPaste").onclick=e=>{ const t=$("#backupBox").value.trim(); if(!t){e.target.textContent="Paste first";setTimeout(()=>e.target.textContent="Restore",1400);return;}
+    try{ S=normalize(JSON.parse(t)); save(); renderSettings(); refreshAll(); e.target.textContent="Restored ✓"; setTimeout(()=>e.target.textContent="Restore",1500);}
+    catch(err){ e.target.textContent="Invalid backup"; setTimeout(()=>e.target.textContent="Restore",1600);} };
+  let armed=false;
+  $("#btnReset").onclick=e=>{ if(!armed){armed=true; e.target.textContent="Tap again to erase everything"; return;} S=structuredClone(DEFAULTS); done={}; save(); renderSettings(); refreshAll(); };
+}
+
+/* ---------- Rest timer ---------- */
+function startTimer(sec){
+  $("#timerbar").hidden=false; document.body.classList.add("has-timer");
+  timer={remain:sec,paused:false}; tick();
+  clearInterval(timer.iv);
+  timer.iv=setInterval(()=>{ if(timer.paused)return; timer.remain--; tick(); if(timer.remain<=0){clearInterval(timer.iv); beep();} },1000);
+  $("#tpause").textContent="⏸";
+}
+function tick(){ const s=Math.max(0,timer.remain); const t=$("#tt");
+  t.textContent=Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); t.classList.toggle("done",s<=0); }
+function beep(){
+  try{ const ac=new (window.AudioContext||window.webkitAudioContext)();
+    const mk=(f,t0,d)=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.connect(g);g.connect(ac.destination);
+      g.gain.setValueAtTime(0.001,ac.currentTime+t0);g.gain.exponentialRampToValueAtTime(0.25,ac.currentTime+t0+0.02);
+      g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+t0+d);o.start(ac.currentTime+t0);o.stop(ac.currentTime+t0+d);};
+    mk(880,0,.18); mk(1175,.2,.22);
+  }catch(e){}
+  if(navigator.vibrate) navigator.vibrate([120,60,120]);
+}
+function stopTimer(){ if(timer)clearInterval(timer.iv); timer=null; $("#timerbar").hidden=true; document.body.classList.remove("has-timer"); }
+$("#tstop").onclick=stopTimer;
+$("#tpause").onclick=()=>{ if(!timer)return; timer.paused=!timer.paused; $("#tpause").textContent=timer.paused?"▶":"⏸"; };
+document.querySelectorAll("#timerbar .presets [data-sec]").forEach(b=>b.onclick=()=>startTimer(+b.dataset.sec));
+
+/* ---------- global click (set checkoff + rest) ---------- */
+document.addEventListener("click",e=>{
+  const chk=e.target.closest(".row .chk");
+  if(chk){ const row=chk.closest(".row"); done[row.dataset.rid]=!done[row.dataset.rid]; row.classList.toggle("done",done[row.dataset.rid]); return; }
+  const rest=e.target.closest(".restbtn"); if(rest){ startTimer(+rest.dataset.sec); }
+});
+
+/* ---------- nav ---------- */
+const SCREENS=["today","plates","history","settings"];
+function go(name){
+  SCREENS.forEach(s=>$("#s-"+s).hidden=(s!==name));
+  document.querySelectorAll("#nav button").forEach(b=>b.setAttribute("aria-current", b.dataset.s===name?"true":"false"));
+  if(name==="today")renderToday(); if(name==="plates")renderPlates(); if(name==="history")renderHistory(); if(name==="settings")renderSettings();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll("#nav button").forEach(b=>b.onclick=()=>go(b.dataset.s));
+function refreshAll(){ go(SCREENS.find(s=>!$("#s-"+s).hidden)||"today"); }
+
+/* ---------- theme ---------- */
+(function(){ let pref=null; try{pref=localStorage.getItem("gitfit_theme")||localStorage.getItem("ironledger_theme");}catch(e){}
+  if(pref) document.documentElement.setAttribute("data-theme",pref);
+  $("#themeToggle").onclick=()=>{ const cur=document.documentElement.getAttribute("data-theme");
+    const dark=cur?cur==="dark":matchMedia("(prefers-color-scheme:dark)").matches; const nx=dark?"light":"dark";
+    document.documentElement.setAttribute("data-theme",nx);
+    try{localStorage.setItem("gitfit_theme",nx);}catch(e){} refreshAll();
+  };
+})();
+
+renderToday();
+</script>
+
+<script>
+/* install as an offline app + ask the browser to keep our saved data */
+if('serviceWorker' in navigator){
+  addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+if(navigator.storage && navigator.storage.persist){ navigator.storage.persist().catch(()=>{}); }
+</script>
+</body>
+</html>
