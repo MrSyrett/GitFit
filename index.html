@@ -15,9 +15,9 @@
 <link rel="icon" href="icon-32.png" sizes="32x32" type="image/png">
 <link rel="icon" href="icon-512.png" sizes="512x512" type="image/png">
 <style>
-  /* reset mirroring the hosted-artifact skeleton, so behaviour matches the preview */
+  /* base reset — the bottom inset keeps scrolling content clear of the home indicator */
   html{color-scheme:light}
-  :root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+  :root{padding:0 0 env(safe-area-inset-bottom,0px)}
   body{margin:0}
   img{max-width:100%}
   [hidden]{display:none!important}
@@ -212,6 +212,13 @@ textarea{width:100%;min-height:90px;background:var(--surface-2);border:1px solid
 #timerbar .presets button{border:1px solid var(--line);background:var(--surface-2);border-radius:8px;padding:7px 10px;font-weight:600;font-size:13px}
 #timerbar .tx{border:1px solid var(--line);background:var(--surface-2);border-radius:8px;width:38px;height:38px;font-size:17px;flex:none;display:grid;place-items:center}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<style>
+  /* iOS home-screen fix: the header fills the status-bar inset itself and sits opaque,
+     so page content scrolls behind it instead of showing above it in the notch area. */
+  header{top:0;background:var(--bg);-webkit-backdrop-filter:none;backdrop-filter:none}
+  header .bar{padding-top:calc(10px + env(safe-area-inset-top,0px))}
+  body{background:var(--bg)}
 </style>
 </head>
 <body>
