@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Daily fitness coach: schedule-aware hub with travel mode and soreness-aware training, coached strength with a pinned plate calculator and per-set reps, illustrated coached mobility, walk-to-run cardio, plus weekly and all-time progress with file backup.">
+<meta name="description" content="Daily fitness coach: schedule-aware hub with travel mode and soreness-aware training, coached strength with a pinned plate calculator and per-set reps, illustrated coached mobility (with optional custom images), walk-to-run cardio, plus weekly and all-time progress with file backup.">
 <meta name="theme-color" content="#d6492f" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#131110" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -319,8 +319,10 @@ textarea{width:100%;min-height:80px;background:var(--surface-2);border:1px solid
 .pl-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:10px 20px}
 .pl-phase{font-family:var(--f-disp);font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:1px;color:#fff;padding:5px 18px;border-radius:100px}
 .pl-name{font-family:var(--f-disp);font-weight:700;font-size:28px;line-height:1.05;text-transform:uppercase;letter-spacing:.4px;text-align:center;text-wrap:balance}
-.pl-img{width:min(60vw,170px);aspect-ratio:100/72;display:grid;place-items:center}
+.pl-img{width:min(66vw,210px);aspect-ratio:100/72;display:grid;place-items:center}
 .pl-img svg{width:100%;height:100%;display:block}
+.pl-img.hasimg{aspect-ratio:auto;max-height:42vh}
+.pl-img .pimg{max-width:100%;max-height:42vh;object-fit:contain;border-radius:14px;display:block}
 .pl-time{font-family:var(--f-disp);font-weight:700;font-size:82px;line-height:.85;font-variant-numeric:tabular-nums}
 .pl-cue{color:var(--muted);font-size:15px;max-width:30ch;min-height:2.6em}
 .pl-next{color:var(--faint);font-size:12px;text-transform:uppercase;letter-spacing:.7px;font-weight:600}
@@ -927,6 +929,15 @@ const POSE_ART={
   "Front Thigh Stretch":_svg(_head(50,16,7)+`<path d="M50 23 V42"/><path d="M50 42 V61"/><path d="M50 42 L59 52 L47 57"/><path d="M50 31 L47 55"/>`),
   "Standing Forward Bend":_svg(_head(61,56,6)+`<path d="M49 61 V41"/><path d="M49 41 L58 51"/><path d="M56 51 L55 61"/>`),
 };
+/* optional: drop your own image at poses/<slug>.(png|jpg|jpeg|webp) and it overrides the drawn figure */
+const slugify=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+function loadPoseImg(container,slug,svg,col){
+  container.innerHTML=svg; container.style.color=col; container.classList.remove('hasimg'); if(!slug)return;
+  const exts=['png','jpg','jpeg','webp']; let i=0; const im=new Image(); im.className='pimg'; im.alt='';
+  im.onload=()=>{container.innerHTML='';container.appendChild(im);container.classList.add('hasimg');};
+  im.onerror=()=>{ if(++i<exts.length) im.src='poses/'+slug+'.'+exts[i]; };
+  im.src='poses/'+slug+'.'+exts[0];
+}
 let mobChoice="cooldown";
 function renderMobility(){
   const wrap=$("#s-mobility"); wrap.innerHTML="";
@@ -960,8 +971,9 @@ function renderMobility(){
     const steps=[];
     R.moves.forEach((m,mi)=>{
       const color="var("+pal[mi%pal.length]+")", art=POSE_ART[m.name]||"";
-      const add=sub=>{ steps.push({transition:true,title:m.name,sub,sec:6,img:art,color});
-        steps.push({title:m.name,sub,sec:m.sec,img:art,color}); };
+      const slug=slugify(m.name);
+      const add=sub=>{ steps.push({transition:true,title:m.name,sub,sec:6,img:art,slug,color});
+        steps.push({title:m.name,sub,sec:m.sec,img:art,slug,color}); };
       if(m.perSide){ add("Left"); add("Right"); } else add("Hold");
     });
     startSession(R.name.split(' · ')[0], steps, ()=>{ const k=dayKey(Date.now()); if(!mobSet().has(k)){S.mobility.push(k);save();} });
@@ -999,7 +1011,7 @@ function renderStep(){
   const s=session.steps[session.idx], col=cssColor(s.color||"var(--accent)");
   const phase=$("#plPhase"),name=$("#plName"),img=$("#plImg"),cue=$("#plCue");
   if(s.img){
-    img.hidden=false; img.innerHTML=s.img; img.style.color=col;
+    img.hidden=false; loadPoseImg(img, s.slug, s.img, col);
     name.hidden=false; cue.textContent="";
     if(s.transition){ phase.textContent="Get ready"; phase.style.background=cssColor("var(--muted)");
       name.textContent="Next · "+s.title; name.style.color=col; }
