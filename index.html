@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Daily fitness coach: schedule-aware hub, coached strength, walk-to-run cardio and stretch mobility, plus weekly and all-time progress — saved on your device.">
+<meta name="description" content="Daily fitness coach: schedule-aware hub with travel mode, coached strength, walk-to-run cardio and stretch mobility, plus weekly and all-time progress.">
 <meta name="theme-color" content="#d6492f" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#131110" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -426,6 +426,7 @@ const DEFAULTS={
   history:[], bodyweight:[], cardio:[], steps:[], mobility:[], habitLog:{},
   sleep:[], water:[], waist:[], recovery:[], dessert:[],
   schedule:["strength","cardio","strength","cardio","strength","cardio","rest"],
+  travel:{on:false,until:null},
   goalWeight:null, stepTarget:8000, cardioTarget:3, cardioLevel:0, sleepTarget:8, waterTarget:8,
 };
 const KEY="gitfit_v1", OLD_KEY="ironledger_v1";
@@ -441,6 +442,8 @@ function normalize(p){
   if(typeof s.habitLog!=="object"||!s.habitLog||Array.isArray(s.habitLog)) s.habitLog={};
   if(!Array.isArray(s.schedule)||s.schedule.length!==7) s.schedule=DEFAULTS.schedule.slice();
   s.schedule=s.schedule.map(x=>["strength","cardio","rest"].includes(x)?x:"rest");
+  if(typeof s.travel!=="object"||!s.travel||Array.isArray(s.travel)) s.travel={on:false,until:null};
+  s.travel.on=!!s.travel.on; if(typeof s.travel.until!=="number") s.travel.until=null;
   if(s.phase!==2)s.phase=1;
   if(typeof s.goalWeight!=="number")s.goalWeight=null;
   s.stepTarget=+s.stepTarget||8000; s.cardioTarget=+s.cardioTarget||3;
@@ -501,6 +504,8 @@ function rateSeg(id,val){let h=`<div class="segsm" data-seg="${id}">`;for(let i=
 const dessertToday=()=>S.dessert.find(e=>sameDay(e.date,Date.now()));
 const dessertWeek=()=>S.dessert.filter(e=>thisWeek(e.date)).reduce((a,e)=>a+e.count,0);
 const todaySched=()=>S.schedule[(new Date().getDay()+6)%7];
+function endOfDay(ts){const d=new Date(ts);d.setHours(23,59,59,999);return d.getTime();}
+function travelActive(){ if(!S.travel.on) return false; if(S.travel.until&&Date.now()>S.travel.until){S.travel.on=false;save();return false;} return true; }
 function backBar(){const b=el("button","backlink","‹ Today");b.onclick=()=>go("today");return b;}
 
 function plateStripHTML(total){
@@ -517,17 +522,20 @@ function plateStripHTML(total){
 /* ================= TODAY (hub) ================= */
 function renderToday(){
   const wrap=$("#s-today"); wrap.innerHTML=""; const d=new Date();
+  const travel=travelActive();
   const sched=todaySched(), type=todayType();
   const ts0=todaySteps(), stepsOk=(ts0?ts0.count:0)>=S.stepTarget;
   const wt0=waterToday(), waterOk=(wt0?wt0.count:0)>=S.waterTarget;
   const sl0=sleepToday(), rec0=recToday();
   const status={};
-  if(sched==="strength") status.workout=workoutToday();
-  else if(sched==="cardio") status.cardio=cardioToday().length>0;
+  if(!travel){
+    if(sched==="strength") status.workout=workoutToday();
+    else if(sched==="cardio") status.cardio=cardioToday().length>0;
+  }
   status.mobility=mobDoneToday(); status.steps=stepsOk; status.sleep=!!sl0; status.water=waterOk; status.recovery=!!(rec0&&rec0.energy);
   const doneN=Object.values(status).filter(Boolean).length, totN=Object.keys(status).length, pct=Math.round(doneN/totN*100);
 
-  const dayLabel=sched==="strength"?"Strength day":sched==="cardio"?"Cardio day":"Rest day";
+  const dayLabel=travel?"Travel day ✈️":(sched==="strength"?"Strength day":sched==="cardio"?"Cardio day":"Rest day");
   const head=el("div","h-top");
   head.innerHTML=`<div><div class="eyebrow">${d.toLocaleDateString(undefined,{weekday:"long"})} · ${dayLabel}</div><h1>Today</h1></div>
     <div class="date">${d.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</div>`;
@@ -539,7 +547,14 @@ function renderToday(){
   wrap.appendChild(sum);
 
   // scheduled session for the day
-  if(sched==="strength"){
+  if(travel){
+    const c=el("div","card"); c.style.marginTop="12px";
+    const endTxt=S.travel.until?` Ends ${new Date(S.travel.until).toLocaleDateString(undefined,{month:"short",day:"numeric"})}.`:"";
+    c.innerHTML=`<div class="hubcard" style="cursor:default"><div class="hi">✈️</div><div class="hb"><b>Travel mode</b><span>Just keep moving. Steps, stretching, sleep and water are all that count this week — your streak and weights are safe.${endTxt}</span></div></div>
+      <div style="padding:0 14px 13px"><button class="btn ghost sm" id="endTravel">End travel mode</button></div>`;
+    wrap.appendChild(c);
+    $("#endTravel").onclick=()=>{S.travel.on=false;save();renderToday();};
+  } else if(sched==="strength"){
     const liftNames=plan().map(k=>META[k].name.replace('Bench Press','Bench').replace('Barbell Row','Row')).join(" · ");
     const c=el("div","card"); c.style.marginTop="12px";
     const b=el("button","hubcard");
@@ -639,6 +654,12 @@ function renderWeekly(){
   head.innerHTML=`<div><div class="eyebrow">${new Date(ws).toLocaleDateString(undefined,{month:"short",day:"numeric"})} – ${new Date(end).toLocaleDateString(undefined,{month:"short",day:"numeric"})}</div><h1>This Week</h1></div>`;
   wrap.appendChild(head);
 
+  const travel=travelActive();
+  if(travel){
+    const tb=el("div","card"); tb.style.marginBottom="12px";
+    tb.innerHTML=`<div class="hubcard" style="cursor:default"><div class="hi">✈️</div><div class="hb"><b>Travel week</b><span>Movement counts and nothing's held against you. Enjoy it.</span></div></div>`;
+    wrap.appendChild(tb);
+  }
   const schedStrength=S.schedule.filter(x=>x==="strength").length;
   const wWk=S.history.filter(r=>thisWeek(r.date)).length;
   const cWk=S.cardio.filter(c=>thisWeek(c.date)); const cMin=cWk.reduce((a,c)=>a+c.minutes,0);
@@ -652,8 +673,8 @@ function renderWeekly(){
   const tile=(k,v,unit,sub)=>`<div class="tile"><div class="k">${k}</div><div class="v num">${v}${unit?`<small> ${unit}</small>`:''}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
   const tiles=el("div","tiles");
   tiles.innerHTML=
-    tile("Strength",wWk,`/ ${schedStrength}`,"sessions done")+
-    tile("Cardio",cWk.length,`/ ${S.cardioTarget}`,cMin+" min total")+
+    tile("Strength",wWk,travel?"":`/ ${schedStrength}`,travel?"travel week":"sessions done")+
+    tile("Cardio",cWk.length,travel?"":`/ ${S.cardioTarget}`,cMin+" min total")+
     tile("Mobility",mobWk,"/ 7","days")+
     tile("Avg sleep",slAvg!=null?fmt(Math.round(slAvg*10)/10):"—",slAvg!=null?"h":"", "goal "+fmt(S.sleepTarget)+" h")+
     tile("Avg steps",stAvg!=null?stAvg.toLocaleString():"—","","goal "+S.stepTarget.toLocaleString())+
@@ -1049,6 +1070,22 @@ function renderSettings(){
   scd.querySelectorAll("[data-day]").forEach(seg=>seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
     S.schedule[+seg.dataset.day]=b.dataset.v; save();
     seg.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x.dataset.v===b.dataset.v));}));
+
+  // travel mode
+  const tv=el("div","card"); tv.style.marginTop="12px";
+  const tvActive=travelActive();
+  const untilVal=S.travel.until?new Date(S.travel.until).toISOString().slice(0,10):"";
+  tv.innerHTML=`<div class="sect-title" style="padding-left:15px">Travel mode</div>
+    <p class="note" style="padding:0 15px">On a trip, only steps, mobility, sleep, water and your check-in count toward the day — workouts aren't marked missed, your streak and weights stay put, and nothing counts against you.</p>
+    <div class="set-group">
+      <div class="field"><label>Travel mode<small>${tvActive?'On — enjoy the trip':'Off'}</small></label><button class="switch" id="tvSwitch" aria-pressed="${tvActive}" aria-label="Travel mode"></button></div>
+      <div class="field" style="border-bottom:0"><label>Ends on<small>Turns off automatically. Leave blank to keep on until you turn it off.</small></label><input type="date" id="tvUntil" value="${untilVal}" style="width:150px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:9px 10px;color:var(--fg)"></div>
+    </div>`;
+  wrap.appendChild(tv);
+  $("#tvSwitch").onclick=()=>{ S.travel.on=!S.travel.on;
+    if(S.travel.on && !S.travel.until) S.travel.until=endOfDay(Date.now()+7*864e5);
+    save(); renderSettings(); };
+  $("#tvUntil").onchange=e=>{ const v=e.target.value; S.travel.until=v?endOfDay(new Date(v+"T00:00:00").getTime()):null; save(); };
 
   const goals=el("div","card"); goals.style.marginTop="12px";
   goals.innerHTML=`<div class="sect-title" style="padding-left:15px">Goals &amp; targets</div><div class="set-group">
