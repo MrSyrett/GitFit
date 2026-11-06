@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Daily fitness coach: schedule-aware hub with travel mode, coached strength, walk-to-run cardio and stretch mobility, plus weekly and all-time progress.">
+<meta name="description" content="Daily fitness coach: schedule-aware hub with travel mode and soreness-aware training, coached strength, walk-to-run cardio and stretch mobility, plus weekly and all-time progress.">
 <meta name="theme-color" content="#d6492f" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#131110" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -196,6 +196,9 @@ header{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:co
 .bw-head .big small{font-size:16px;color:var(--muted);font-weight:500}
 .bw-head .hi{width:40px;height:40px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-size:19px;flex:none}
 .backlink{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--surface);border-radius:100px;padding:6px 14px 6px 11px;font-weight:600;font-size:13px;color:var(--muted);margin-bottom:12px;box-shadow:var(--shadow)}
+.adv{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));background:color-mix(in srgb,var(--warn) 10%,var(--surface))}
+.lightbanner{margin:0 0 12px;padding:11px 14px;border-radius:var(--radius);border:1px solid color-mix(in srgb,var(--warn) 45%,var(--line));background:color-mix(in srgb,var(--warn) 10%,var(--surface));font-size:13px;color:var(--fg)}
+.lightbanner b{font-family:var(--f-disp);text-transform:uppercase;letter-spacing:.3px}
 .rangeseg{display:flex;gap:2px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px;margin-bottom:14px}
 .rangeseg button{flex:1;border:0;background:transparent;color:var(--muted);font-weight:600;font-size:13px;padding:8px;border-radius:7px}
 .rangeseg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:var(--shadow)}
@@ -426,7 +429,7 @@ const DEFAULTS={
   history:[], bodyweight:[], cardio:[], steps:[], mobility:[], habitLog:{},
   sleep:[], water:[], waist:[], recovery:[], dessert:[],
   schedule:["strength","cardio","strength","cardio","strength","cardio","rest"],
-  travel:{on:false,until:null},
+  travel:{on:false,until:null}, restOverride:[], lightDays:[],
   goalWeight:null, stepTarget:8000, cardioTarget:3, cardioLevel:0, sleepTarget:8, waterTarget:8,
 };
 const KEY="gitfit_v1", OLD_KEY="ironledger_v1";
@@ -438,7 +441,7 @@ function load(){ try{ let raw=localStorage.getItem(KEY);
 function normalize(p){
   const s=Object.assign(structuredClone(DEFAULTS),p||{});
   s.lifts=Object.assign(structuredClone(DEFAULTS.lifts),p&&p.lifts||{});
-  ["history","bodyweight","cardio","steps","mobility","sleep","water","waist","recovery","dessert"].forEach(k=>{if(!Array.isArray(s[k]))s[k]=[];});
+  ["history","bodyweight","cardio","steps","mobility","sleep","water","waist","recovery","dessert","restOverride","lightDays"].forEach(k=>{if(!Array.isArray(s[k]))s[k]=[];});
   if(typeof s.habitLog!=="object"||!s.habitLog||Array.isArray(s.habitLog)) s.habitLog={};
   if(!Array.isArray(s.schedule)||s.schedule.length!==7) s.schedule=DEFAULTS.schedule.slice();
   s.schedule=s.schedule.map(x=>["strength","cardio","rest"].includes(x)?x:"rest");
@@ -506,6 +509,8 @@ const dessertWeek=()=>S.dessert.filter(e=>thisWeek(e.date)).reduce((a,e)=>a+e.co
 const todaySched=()=>S.schedule[(new Date().getDay()+6)%7];
 function endOfDay(ts){const d=new Date(ts);d.setHours(23,59,59,999);return d.getTime();}
 function travelActive(){ if(!S.travel.on) return false; if(S.travel.until&&Date.now()>S.travel.until){S.travel.on=false;save();return false;} return true; }
+const recoveryToday=()=>S.restOverride.includes(dayKey(Date.now()));
+const lightToday=()=>S.lightDays.includes(dayKey(Date.now()));
 function backBar(){const b=el("button","backlink","‹ Today");b.onclick=()=>go("today");return b;}
 
 function plateStripHTML(total){
@@ -522,20 +527,18 @@ function plateStripHTML(total){
 /* ================= TODAY (hub) ================= */
 function renderToday(){
   const wrap=$("#s-today"); wrap.innerHTML=""; const d=new Date();
-  const travel=travelActive();
+  const travel=travelActive(), recoveryDay=recoveryToday();
   const sched=todaySched(), type=todayType();
   const ts0=todaySteps(), stepsOk=(ts0?ts0.count:0)>=S.stepTarget;
   const wt0=waterToday(), waterOk=(wt0?wt0.count:0)>=S.waterTarget;
   const sl0=sleepToday(), rec0=recToday();
+  const sessionDay = !travel && !recoveryDay && (sched==="strength"||sched==="cardio");
   const status={};
-  if(!travel){
-    if(sched==="strength") status.workout=workoutToday();
-    else if(sched==="cardio") status.cardio=cardioToday().length>0;
-  }
+  if(sessionDay){ if(sched==="strength") status.workout=workoutToday(); else status.cardio=cardioToday().length>0; }
   status.mobility=mobDoneToday(); status.steps=stepsOk; status.sleep=!!sl0; status.water=waterOk; status.recovery=!!(rec0&&rec0.energy);
   const doneN=Object.values(status).filter(Boolean).length, totN=Object.keys(status).length, pct=Math.round(doneN/totN*100);
 
-  const dayLabel=travel?"Travel day ✈️":(sched==="strength"?"Strength day":sched==="cardio"?"Cardio day":"Rest day");
+  const dayLabel=travel?"Travel day ✈️":recoveryDay?"Recovery day":(sched==="strength"?"Strength day":sched==="cardio"?"Cardio day":"Rest day");
   const head=el("div","h-top");
   head.innerHTML=`<div><div class="eyebrow">${d.toLocaleDateString(undefined,{weekday:"long"})} · ${dayLabel}</div><h1>Today</h1></div>
     <div class="date">${d.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</div>`;
@@ -546,7 +549,39 @@ function renderToday(){
     <div class="sx"><b>${doneN===totN?'All done 🎯':'Daily habits'}</b><div>${doneN===totN?'Great work today.':(totN-doneN)+' habit'+((totN-doneN)===1?'':'s')+' left — small wins add up.'}</div></div></div>`;
   wrap.appendChild(sum);
 
-  // scheduled session for the day
+  // 1. morning check-in
+  const rCard=el("div","card"); rCard.style.marginTop="12px";
+  rCard.innerHTML=`<div class="sect-title" style="padding:12px 15px 2px">Morning check-in</div>
+    <div class="set-group" style="padding-top:2px">
+      <div class="field"><label>Energy<small>1 wiped · 5 fresh</small></label>${rateSeg("energy",rec0&&rec0.energy)}</div>
+      <div class="field" style="border-bottom:0"><label>Soreness<small>1 none · 5 very sore</small></label>${rateSeg("soreness",rec0&&rec0.soreness)}</div>
+    </div>`;
+  wrap.appendChild(rCard);
+  rCard.querySelectorAll("[data-seg]").forEach(sg=>sg.querySelectorAll("button").forEach(b=>b.onclick=()=>{setRec(sg.dataset.seg,+b.dataset.v);renderToday();}));
+
+  // soreness advisory — only on a session day you haven't done yet
+  const sore = rec0 && rec0.soreness>=4;
+  const sessionDone = sched==="strength"?workoutToday():(sched==="cardio"?cardioToday().length>0:false);
+  if(sore && sessionDay && !sessionDone && !lightToday()){
+    const acts = sched==="strength"
+      ? `<button class="btn ghost sm" id="goLight">Do a lighter session (−10%)</button><button class="btn ghost sm" id="goRecover">Make it a recovery day</button>`
+      : `<button class="btn ghost sm" id="goRecover">Make it a recovery day</button>`;
+    const a=el("div","card adv"); a.style.marginTop="12px";
+    a.innerHTML=`<div class="hubcard" style="cursor:default"><div class="hi">🩹</div><div class="hb"><b>Feeling pretty sore</b><span>Normal muscle soreness is usually fine to train through lightly — but if anything feels like sharp or joint pain, don't push it. Your call:</span></div></div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding:0 14px 14px">${acts}</div>`;
+    wrap.appendChild(a);
+    const gl=$("#goLight"); if(gl) gl.onclick=()=>{S.lightDays.push(dayKey(Date.now()));save();renderToday();};
+    $("#goRecover").onclick=()=>{S.restOverride.push(dayKey(Date.now()));save();renderToday();};
+  }
+
+  // 2. sleep
+  const slCard=el("div","card"); slCard.style.marginTop="12px";
+  slCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Sleep last night</div><div class="big num">${sl0?fmt(sl0.hours):'—'}<small> h / ${fmt(S.sleepTarget)} h</small></div></div><div class="hi">😴</div></div>
+    <div class="inlinelog"><input id="sleepIn" class="num" type="number" inputmode="decimal" placeholder="Hours slept" value="${sl0?fmt(sl0.hours):''}"><button id="sleepLog">Log</button></div>`;
+  wrap.appendChild(slCard);
+  $("#sleepLog").onclick=()=>{const v=parseFloat($("#sleepIn").value);if(isNaN(v)||v<0||v>24)return;const ex=sleepToday();if(ex)ex.hours=v;else S.sleep.push({date:Date.now(),hours:v});S.sleep.sort((a,b)=>a.date-b.date);save();renderToday();};
+
+  // 3. session for the day
   if(travel){
     const c=el("div","card"); c.style.marginTop="12px";
     const endTxt=S.travel.until?` Ends ${new Date(S.travel.until).toLocaleDateString(undefined,{month:"short",day:"numeric"})}.`:"";
@@ -554,11 +589,18 @@ function renderToday(){
       <div style="padding:0 14px 13px"><button class="btn ghost sm" id="endTravel">End travel mode</button></div>`;
     wrap.appendChild(c);
     $("#endTravel").onclick=()=>{S.travel.on=false;save();renderToday();};
+  } else if(recoveryDay){
+    const c=el("div","card"); c.style.marginTop="12px";
+    c.innerHTML=`<div class="hubcard" style="cursor:default"><div class="hi">🛌</div><div class="hb"><b>Recovery day</b><span>You flagged high soreness, so the workout is off today — do mobility and an easy walk if you feel like it. Weights and streak are safe.</span></div></div>
+      <div style="padding:0 14px 13px"><button class="btn ghost sm" id="undoRecover">Actually, I'll train</button></div>`;
+    wrap.appendChild(c);
+    $("#undoRecover").onclick=()=>{S.restOverride=S.restOverride.filter(k=>k!==dayKey(Date.now()));save();renderToday();};
   } else if(sched==="strength"){
+    const light=lightToday();
     const liftNames=plan().map(k=>META[k].name.replace('Bench Press','Bench').replace('Barbell Row','Row')).join(" · ");
     const c=el("div","card"); c.style.marginTop="12px";
     const b=el("button","hubcard");
-    b.innerHTML=`<div class="hi">🏋️</div><div class="hb"><b>Workout ${type}</b><span>${liftNames}</span></div>
+    b.innerHTML=`<div class="hi">🏋️</div><div class="hb"><b>Workout ${type}${light?' · Lighter':''}</b><span>${light?'Recovery session — −10%, no progression':liftNames}</span></div>
       <div class="hx">${workoutToday()?'<span class="pill ok">Done</span>':'<span class="pill">Start</span>'}<span class="chev">›</span></div>`;
     b.onclick=()=>go("workout"); c.appendChild(b); wrap.appendChild(c);
   } else if(sched==="cardio"){
@@ -574,7 +616,7 @@ function renderToday(){
     wrap.appendChild(c);
   }
 
-  // mobility (daily)
+  // 4. mobility (daily)
   const mc=el("div","card"); mc.style.marginTop="12px";
   const streak=mobStreak();
   const mBtn=el("button","hubcard");
@@ -582,7 +624,7 @@ function renderToday(){
     <div class="hx">${status.mobility?'<span class="pill ok">Done</span>':'<span class="pill">Start</span>'}<span class="chev">›</span></div>`;
   mBtn.onclick=()=>go("mobility"); mc.appendChild(mBtn); wrap.appendChild(mc);
 
-  // steps
+  // 5. steps
   const sc=Math.min(1,(ts0?ts0.count:0)/S.stepTarget);
   const sCard=el("div","card"); sCard.style.marginTop="12px";
   sCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Steps</div>
@@ -594,14 +636,7 @@ function renderToday(){
     const ex=todaySteps(); if(ex)ex.count=v; else S.steps.push({date:Date.now(),count:v});
     S.steps.sort((a,b)=>a.date-b.date); save(); renderToday();};
 
-  // sleep
-  const slCard=el("div","card"); slCard.style.marginTop="12px";
-  slCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Sleep last night</div><div class="big num">${sl0?fmt(sl0.hours):'—'}<small> h / ${fmt(S.sleepTarget)} h</small></div></div><div class="hi">😴</div></div>
-    <div class="inlinelog"><input id="sleepIn" class="num" type="number" inputmode="decimal" placeholder="Hours slept" value="${sl0?fmt(sl0.hours):''}"><button id="sleepLog">Log</button></div>`;
-  wrap.appendChild(slCard);
-  $("#sleepLog").onclick=()=>{const v=parseFloat($("#sleepIn").value);if(isNaN(v)||v<0||v>24)return;const ex=sleepToday();if(ex)ex.hours=v;else S.sleep.push({date:Date.now(),hours:v});S.sleep.sort((a,b)=>a.date-b.date);save();renderToday();};
-
-  // water
+  // 6. water
   const wprog=Math.min(1,(wt0?wt0.count:0)/S.waterTarget);
   const waCard=el("div","card"); waCard.style.marginTop="12px";
   waCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Water</div><div class="big num">${wt0?wt0.count:0}<small> / ${S.waterTarget} glasses</small></div></div><div class="hi">💧</div></div>
@@ -611,26 +646,16 @@ function renderToday(){
   const bumpWater=n=>{let e=waterToday();if(!e){e={date:Date.now(),count:0};S.water.push(e);}e.count=Math.max(0,e.count+n);save();renderToday();};
   $("#wPlus").onclick=()=>bumpWater(1); $("#wMinus").onclick=()=>bumpWater(-1);
 
-  // nutrition — dessert tally
+  // 7. treats
   const dt=dessertToday(), dw=dessertWeek();
   const nCard=el("div","card"); nCard.style.marginTop="12px";
-  nCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Dessert</div><div class="big num">${dt?dt.count:0}<small> today · ${dw} this week</small></div></div><div class="hi">🍰</div></div>
-    <div style="display:flex;gap:9px;padding:0 14px 13px;align-items:stretch"><button class="iconbtn" id="dMinus" style="width:46px;height:auto;font-size:22px" aria-label="Remove">−</button><button class="btn ghost" id="dPlus" style="flex:1">+ Add dessert</button></div>`;
+  nCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Treats</div><div class="big num">${dt?dt.count:0}<small> today · ${dw} this week</small></div></div><div class="hi">🍰</div></div>
+    <div style="display:flex;gap:9px;padding:0 14px 13px;align-items:stretch"><button class="iconbtn" id="dMinus" style="width:46px;height:auto;font-size:22px" aria-label="Remove">−</button><button class="btn ghost" id="dPlus" style="flex:1">+ Add treat</button></div>`;
   wrap.appendChild(nCard);
   const bumpDessert=n=>{let e=dessertToday();if(!e){e={date:Date.now(),count:0};S.dessert.push(e);}e.count=Math.max(0,e.count+n);save();renderToday();};
   $("#dPlus").onclick=()=>bumpDessert(1); $("#dMinus").onclick=()=>bumpDessert(-1);
 
-  // morning check-in
-  const rCard=el("div","card"); rCard.style.marginTop="12px";
-  rCard.innerHTML=`<div class="sect-title" style="padding:12px 15px 2px">Morning check-in</div>
-    <div class="set-group" style="padding-top:2px">
-      <div class="field"><label>Energy<small>1 wiped · 5 fresh</small></label>${rateSeg("energy",rec0&&rec0.energy)}</div>
-      <div class="field" style="border-bottom:0"><label>Soreness<small>1 none · 5 very sore</small></label>${rateSeg("soreness",rec0&&rec0.soreness)}</div>
-    </div>`;
-  wrap.appendChild(rCard);
-  rCard.querySelectorAll("[data-seg]").forEach(sg=>sg.querySelectorAll("button").forEach(b=>b.onclick=()=>{setRec(sg.dataset.seg,+b.dataset.v);renderToday();}));
-
-  // measurements (bodyweight + waist)
+  // 8. measurements (bodyweight + waist)
   const last=S.bodyweight[S.bodyweight.length-1], lw=lastWaist();
   const mCard=el("div","card"); mCard.style.marginTop="12px";
   mCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Bodyweight</div><div class="big num">${last?fmt(last.w):'—'}<small> ${U()}</small></div></div><div class="hi">⚖️</div></div>
@@ -679,7 +704,7 @@ function renderWeekly(){
     tile("Avg sleep",slAvg!=null?fmt(Math.round(slAvg*10)/10):"—",slAvg!=null?"h":"", "goal "+fmt(S.sleepTarget)+" h")+
     tile("Avg steps",stAvg!=null?stAvg.toLocaleString():"—","","goal "+S.stepTarget.toLocaleString())+
     tile("Water/day",waAvg!=null?fmt(Math.round(waAvg*10)/10):"—","","goal "+S.waterTarget)+
-    tile("Desserts",deWk,"","this week")+
+    tile("Treats",deWk,"","this week")+
     tile("Weight",bwChg!=null?(bwChg>0?"+":"")+fmt(Math.round(bwChg*10)/10):"—",bwChg!=null?U():"","change this week");
   wrap.appendChild(tiles);
 
@@ -706,15 +731,16 @@ function renderWeekly(){
 
 /* ================= WORKOUT ================= */
 function renderWorkout(){
-  const type=todayType(), wrap=$("#s-workout"); wrap.innerHTML="";
+  const type=todayType(), wrap=$("#s-workout"); wrap.innerHTML=""; const light=lightToday();
   wrap.appendChild(backBar());
   const head=el("div","h-top");
-  head.innerHTML=`<div><div class="eyebrow">Starting Strength</div><h1>Workout ${type}</h1>
+  head.innerHTML=`<div><div class="eyebrow">Starting Strength</div><h1>Workout ${type}${light?' · Lighter':''}</h1>
       <span class="phase-pill">Phase ${S.phase} · ${S.phase===1?'Linear progression':'Barbell row'}</span></div>`;
   wrap.appendChild(head);
+  if(light) wrap.insertAdjacentHTML("beforeend",`<div class="lightbanner"><b>Recovery session</b> — weights cut ~10% and your progression stays put. Move well, don't grind.</div>`);
   plan().forEach(key=>{
     const M=META[key], card=el("div","card"); let idx=0;
-    const lift=S.lifts[key], work=lift.weight;
+    const lift=S.lifts[key], work=light?roundToStep(lift.weight*0.9):lift.weight;
     card.innerHTML=`<div class="ex-head"><div class="n"><span class="dot" style="background:${M.color}"></span><h2>${M.name}</h2></div>
       <div class="scheme">${M.sets}×${M.reps} <b class="num">${fmt(work)}</b><small> ${U()}</small></div></div>`;
     const list=el("div","setlist");
@@ -737,7 +763,13 @@ function renderWorkout(){
     wrap.appendChild(card);
   });
   wrap.appendChild(el("div","spacer"));
-  const fin=el("button","btn"); fin.textContent="Finish workout"; fin.onclick=openReview; wrap.appendChild(fin);
+  const fin=el("button","btn"); fin.textContent=light?"Finish recovery session":"Finish workout"; fin.onclick=light?()=>commitLight(type):openReview; wrap.appendChild(fin);
+}
+function commitLight(type){
+  const rec={date:Date.now(),type,phase:S.phase,units:S.units,light:true,lifts:[]};
+  plan().forEach(key=>{const M=META[key],lift=S.lifts[key];
+    rec.lifts.push({key,name:M.name,weight:roundToStep(lift.weight*0.9),success:true,bar:true,light:true});});
+  S.history.push(rec); S.lightDays=S.lightDays.filter(k=>k!==dayKey(Date.now())); done={}; save(); go("today"); window.scrollTo(0,0);
 }
 function openReview(){
   const type=todayType(), wrap=$("#s-workout"); wrap.innerHTML="";
@@ -966,8 +998,8 @@ function renderHistory(){
   }
   if(fDe.length>=2){
     const c=el("div","chartcard"); c.style.marginTop="12px";
-    c.innerHTML=`<h3>Desserts</h3><div class="legend"><span style="color:var(--chart-ink-2)">per day</span></div>
-      <svg class="chart" id="desChart" viewBox="0 0 340 150" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Desserts per day over time"></svg>`;
+    c.innerHTML=`<h3>Treats</h3><div class="legend"><span style="color:var(--chart-ink-2)">per day</span></div>
+      <svg class="chart" id="desChart" viewBox="0 0 340 150" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Treats per day over time"></svg>`;
     wrap.appendChild(c);
     drawLine("#desChart",fDe.map(p=>({w:p.count,date:p.date})),getCSS("--accent"),150,{});
   }
@@ -983,7 +1015,7 @@ function renderHistory(){
     [...fHi].reverse().forEach(r=>{const s=el("div","sess");
       const lf=(r.lifts||[]).map(x=>{const nm=(META[x.key]?META[x.key].name:x.name).replace('Bench Press','Bench').replace('Barbell Row','Row');
         return `<i class="${x.success?'':'x'}">${nm} ${fmt(x.weight)}${x.success?'':' ✕'}</i>`;}).join("");
-      s.innerHTML=`<div class="badge">${r.type}</div><div class="sd"><div class="dt">${new Date(r.date).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})} · P${r.phase||1} · ${r.units||S.units}</div><div class="lf num">${lf}</div></div>`;
+      s.innerHTML=`<div class="badge">${r.type}</div><div class="sd"><div class="dt">${new Date(r.date).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})} · P${r.phase||1}${r.light?' · light':''} · ${r.units||S.units}</div><div class="lf num">${lf}</div></div>`;
       list.appendChild(s);});
     wrap.appendChild(list);
   }
@@ -994,7 +1026,7 @@ function drawWorkChart(lifts,hist){
   hist=hist||S.history;
   const svg=$("#chart"); if(!svg)return;
   const W=340,H=210,mL=34,mR=14,mT=10,mB=26, ink2=getCSS("--chart-ink-2"),grid=getCSS("--chart-grid");
-  const series=lifts.map(k=>{const pts=[];hist.forEach((r,i)=>{const h=(r.lifts||[]).find(x=>x.key===k&&x.bar);if(h)pts.push({i,w:h.weight});});return{k,color:cssColor(META[k].color),pts};}).filter(s=>s.pts.length);
+  const series=lifts.map(k=>{const pts=[];hist.forEach((r,i)=>{if(r.light)return;const h=(r.lifts||[]).find(x=>x.key===k&&x.bar);if(h)pts.push({i,w:h.weight});});return{k,color:cssColor(META[k].color),pts};}).filter(s=>s.pts.length);
   const n=hist.length; let lo=Infinity,hi=-Infinity; series.forEach(s=>s.pts.forEach(p=>{lo=Math.min(lo,p.w);hi=Math.max(hi,p.w);}));
   if(!isFinite(lo)){lo=0;hi=1;} if(lo===hi){lo-=step();hi+=step();}
   const pad=(hi-lo)*0.12||step(); lo=Math.floor(lo-pad); hi=Math.ceil(hi+pad);
