@@ -1,7 +1,7 @@
 {
   "name": "GitFit",
   "short_name": "GitFit",
-  "description": "Starting Strength trainer with plate math, rest timer and saved progress.",
+  "description": "Daily fitness coach: strength, coached walk-to-run cardio, guided mobility, steps and progress.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
