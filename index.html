@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Daily fitness coach: schedule-aware hub with travel mode and soreness-aware training, coached strength with a pinned plate calculator, per-set reps and a single rest bar, walk-to-run cardio and stretch mobility, plus weekly and all-time progress with file backup.">
+<meta name="description" content="Daily fitness coach: schedule-aware hub with travel mode and soreness-aware training, coached strength with a pinned plate calculator and per-set reps, illustrated coached mobility, walk-to-run cardio, plus weekly and all-time progress with file backup.">
 <meta name="theme-color" content="#d6492f" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#131110" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -318,6 +318,9 @@ textarea{width:100%;min-height:80px;background:var(--surface-2);border:1px solid
 .pl-top .cnt{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
 .pl-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:10px 20px}
 .pl-phase{font-family:var(--f-disp);font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:1px;color:#fff;padding:5px 18px;border-radius:100px}
+.pl-name{font-family:var(--f-disp);font-weight:700;font-size:28px;line-height:1.05;text-transform:uppercase;letter-spacing:.4px;text-align:center;text-wrap:balance}
+.pl-img{width:min(60vw,170px);aspect-ratio:100/72;display:grid;place-items:center}
+.pl-img svg{width:100%;height:100%;display:block}
 .pl-time{font-family:var(--f-disp);font-weight:700;font-size:82px;line-height:.85;font-variant-numeric:tabular-nums}
 .pl-cue{color:var(--muted);font-size:15px;max-width:30ch;min-height:2.6em}
 .pl-next{color:var(--faint);font-size:12px;text-transform:uppercase;letter-spacing:.7px;font-weight:600}
@@ -444,7 +447,7 @@ const DEFAULTS={
   goalWeight:null, stepTarget:8000, cardioTarget:3, cardioLevel:0, sleepTarget:8, waterTarget:8,
 };
 const KEY="gitfit_v1", OLD_KEY="ironledger_v1";
-let S=load(), done={}, setReps={}, timer=null, session=null;
+let S=load(), done={}, setReps={}, timer=null, session=null, workoutEdit=null;
 
 function load(){ try{ let raw=localStorage.getItem(KEY);
   if(!raw){const o=localStorage.getItem(OLD_KEY); if(o){localStorage.setItem(KEY,o);raw=o;}}
@@ -486,7 +489,12 @@ function platesFor(total){const b=S.bar;let ps=(total-b)/2;const out=[];
 function warmups(work){const b=S.bar,out=[seg0(b,5,2)];if(work<=b)return out;let prev=b;
   for(const g of [{p:.4,r:5},{p:.6,r:3},{p:.8,r:2}]){const w=roundToStep(work*g.p);if(w>prev+1e-9&&w<work-1e-9){out.push(seg0(w,g.r,1));prev=w;}}return out;}
 function seg0(weight,reps,sets){return {weight,reps,sets,warm:true};}
-const todayType=()=>(S.history.length%2===0)?"A":"B";
+function todaysStrengthRec(){return S.history.find(r=>sameDay(r.date,Date.now()));}
+function todayType(){
+  const t=todaysStrengthRec(); if(t) return t.type;
+  for(let i=S.history.length-1;i>=0;i--){if(!sameDay(S.history[i].date,Date.now()))return S.history[i].type==='A'?'B':'A';}
+  return 'A';
+}
 const plan=()=>PLAN[S.phase][todayType()];
 function progress(l,ok){if(ok)return{weight:l.weight+l.incr,fails:0,deloaded:false};const f=(l.fails||0)+1;
   if(f>=3)return{weight:roundToStep(l.weight*0.9),fails:0,deloaded:true};return{weight:l.weight,fails:f,deloaded:false};}
@@ -541,9 +549,17 @@ function plateStripHTML(total){
 }
 
 function liftShort(key){return META[key].name.replace('Bench Press','Bench').replace('Barbell Row','Row');}
+function effWork(key){ if(workoutEdit){const x=workoutEdit.lifts.find(l=>l.key===key); if(x) return x.weight;} const lift=S.lifts[key]; return lightToday()?roundToStep(lift.weight*0.9):lift.weight; }
+function loadEditState(rec){
+  done={}; setReps={};
+  const sets=workoutSets();
+  sets.forEach(s=>{ if(s.label.indexOf("Warm-up")===0) done[s.rid]=true; });
+  plan().forEach(key=>{const rl=rec.lifts.find(l=>l.key===key), reps=(rl&&rl.reps)||[];
+    sets.filter(s=>s.rid.startsWith(key+"_")&&s.label.indexOf("Set")===0).forEach((s,i)=>{done[s.rid]=true; if(reps[i]!==undefined)setReps[s.rid]=reps[i];});});
+}
 function workoutSets(){
-  const light=lightToday(), out=[];
-  plan().forEach(key=>{const M=META[key],lift=S.lifts[key],work=light?roundToStep(lift.weight*0.9):lift.weight;let idx=0;
+  const out=[];
+  plan().forEach(key=>{const M=META[key],work=effWork(key);let idx=0;
     warmups(work).forEach(w=>{out.push({name:liftShort(key),label:`Warm-up · ${w.sets>1?w.sets+' × '+w.reps:w.reps+' reps'}`,weight:w.weight,rid:`${key}_${idx++}`});});
     for(let i=0;i<M.sets;i++){out.push({name:liftShort(key),label:`Set ${i+1} · ${M.reps} reps`,weight:work,rid:`${key}_${idx++}`});}
   });
@@ -764,17 +780,18 @@ function renderWeekly(){
 
 /* ================= WORKOUT ================= */
 function renderWorkout(){
-  const type=todayType(), wrap=$("#s-workout"); wrap.innerHTML=""; const light=lightToday();
+  const type=todayType(), wrap=$("#s-workout"); wrap.innerHTML=""; const light=lightToday(), editing=!!workoutEdit;
   wrap.appendChild(backBar());
   const head=el("div","h-top");
   head.innerHTML=`<div><div class="eyebrow">Starting Strength</div><h1>Workout ${type}${light?' · Lighter':''}</h1>
       <span class="phase-pill">Phase ${S.phase} · ${S.phase===1?'Linear progression':'Barbell row'}</span></div>`;
   wrap.appendChild(head);
-  if(light) wrap.insertAdjacentHTML("beforeend",`<div class="lightbanner"><b>Recovery session</b> — weights cut ~10% and your progression stays put. Move well, don't grind.</div>`);
+  if(editing) wrap.insertAdjacentHTML("beforeend",`<div class="lightbanner"><b>Editing today's workout</b> — adjust your reps or results and tap Update to re-save.</div>`);
+  else if(light) wrap.insertAdjacentHTML("beforeend",`<div class="lightbanner"><b>Recovery session</b> — weights cut ~10% and your progression stays put. Move well, don't grind.</div>`);
   wrap.insertAdjacentHTML("beforeend",`<div class="pinned" id="pinnedCalc">${pinnedCalcHTML()}</div>`);
   plan().forEach(key=>{
     const M=META[key], card=el("div","card"); let idx=0;
-    const lift=S.lifts[key], work=light?roundToStep(lift.weight*0.9):lift.weight;
+    const work=effWork(key);
     card.innerHTML=`<div class="ex-head"><div class="n"><span class="dot" style="background:${M.color}"></span><h2>${M.name}</h2></div>
       <div class="scheme">${M.sets}×${M.reps} <b class="num">${fmt(work)}</b><small> ${U()}</small></div></div>`;
     const list=el("div","setlist");
@@ -797,7 +814,7 @@ function renderWorkout(){
     wrap.appendChild(card);
   });
   wrap.appendChild(el("div","spacer"));
-  const fin=el("button","btn"); fin.textContent=light?"Finish recovery session":"Finish workout"; fin.onclick=light?()=>commitLight(type):openReview; wrap.appendChild(fin);
+  const fin=el("button","btn"); fin.textContent=editing?"Update workout":(light?"Finish recovery session":"Finish workout"); fin.onclick=(light&&!editing)?()=>commitLight(type):openReview; wrap.appendChild(fin);
   showRestBar(true);
 }
 function commitLight(type){
@@ -832,9 +849,13 @@ function openReview(){
   wrap.appendChild(sv); wrap.appendChild(bk);
 }
 function commit(type,picks){
+  if(workoutEdit){
+    workoutEdit.lifts.forEach(l=>{const lf=S.lifts[l.key]; if(lf&&l.prevWeight!==undefined){lf.weight=l.prevWeight; lf.fails=l.prevFails||0;}});
+    const ix=S.history.indexOf(workoutEdit); if(ix>=0)S.history.splice(ix,1); workoutEdit=null;
+  }
   const rec={date:Date.now(),type,phase:S.phase,units:S.units,lifts:[]};
   plan().forEach(key=>{const M=META[key],ok=picks[key]!==false,lift=S.lifts[key];
-    rec.lifts.push({key,name:M.name,weight:lift.weight,success:ok,bar:true,reps:liftReps(key)});
+    rec.lifts.push({key,name:M.name,weight:lift.weight,success:ok,bar:true,reps:liftReps(key),prevWeight:lift.weight,prevFails:lift.fails});
     const nx=progress(lift,ok); lift.weight=nx.weight; lift.fails=nx.fails; lift._deload=nx.deloaded;});
   S.history.push(rec); done={}; setReps={}; save(); go("today"); window.scrollTo(0,0);
 }
@@ -892,6 +913,20 @@ function renderCardio(){
 }
 
 /* ================= MOBILITY ================= */
+/* original, hand-built pose illustrations (simple figures) — stroke follows currentColor */
+const _svg=b=>`<svg viewBox="0 0 100 72" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="62" x2="88" y2="62" stroke-width="2" opacity=".3"/>${b}</svg>`;
+const _head=(x,y,r)=>`<circle cx="${x}" cy="${y}" r="${r||6.5}" fill="currentColor" stroke="none"/>`;
+const POSE_ART={
+  "Seated Neck Rolls":_svg(_head(53,23,7)+`<path d="M50 30 V46"/><path d="M37 59 Q50 49 63 59"/><path d="M50 37 L41 53 M50 37 L59 53"/>`),
+  "Bound Angle Pose":_svg(_head(50,21,7)+`<path d="M50 28 V45"/><path d="M50 45 L33 59 L50 51 L67 59 Z"/><path d="M50 41 L35 57 M50 41 L65 57"/>`),
+  "Easy Pose Arm Stretch":_svg(_head(50,21,7)+`<path d="M50 28 V47"/><path d="M37 59 Q50 49 63 59"/><path d="M50 35 H66 M66 35 L60 41"/>`),
+  "Child's Pose":_svg(_head(29,53,6)+`<path d="M34 55 L57 45"/><path d="M57 45 L66 60"/><path d="M33 55 L16 59"/>`),
+  "Cat Cow Pose":_svg(_head(30,40,6)+`<path d="M30 59 L36 43"/><path d="M36 43 Q52 34 67 43"/><path d="M67 43 L72 59"/>`),
+  "Cobra Pose":_svg(_head(42,41,6)+`<path d="M45 60 H76"/><path d="M61 60 L47 45"/><path d="M47 47 L49 60"/>`),
+  "Downward Dog":_svg(_head(31,53,5)+`<path d="M22 61 L50 29 L78 61"/>`),
+  "Front Thigh Stretch":_svg(_head(50,16,7)+`<path d="M50 23 V42"/><path d="M50 42 V61"/><path d="M50 42 L59 52 L47 57"/><path d="M50 31 L47 55"/>`),
+  "Standing Forward Bend":_svg(_head(61,56,6)+`<path d="M49 61 V41"/><path d="M49 41 L58 51"/><path d="M56 51 L55 61"/>`),
+};
 let mobChoice="cooldown";
 function renderMobility(){
   const wrap=$("#s-mobility"); wrap.innerHTML="";
@@ -921,10 +956,13 @@ function renderMobility(){
   wrap.appendChild(card);
   card.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>{mobChoice=b.dataset.r;renderMobility();});
   $("#startMob").onclick=()=>{
-    const steps=[]; R.moves.forEach(m=>{
-      if(m.perSide){ steps.push({phase:"left",title:m.name+" — left",sec:m.sec,cue:m.cue,color:"var(--accent)"});
-                     steps.push({phase:"right",title:m.name+" — right",sec:m.sec,cue:"Switch sides. "+m.cue,color:"var(--accent)"}); }
-      else steps.push({phase:"hold",title:m.name,sec:m.sec,cue:m.cue,color:"var(--accent)"});
+    const pal=["--s1","--s3","--s4","--s5","--s2","--good","--s1","--s3","--s4","--s5"];
+    const steps=[];
+    R.moves.forEach((m,mi)=>{
+      const color="var("+pal[mi%pal.length]+")", art=POSE_ART[m.name]||"";
+      const add=sub=>{ steps.push({transition:true,title:m.name,sub,sec:6,img:art,color});
+        steps.push({title:m.name,sub,sec:m.sec,img:art,color}); };
+      if(m.perSide){ add("Left"); add("Right"); } else add("Hold");
     });
     startSession(R.name.split(' · ')[0], steps, ()=>{ const k=dayKey(Date.now()); if(!mobSet().has(k)){S.mobility.push(k);save();} });
   };
@@ -937,7 +975,8 @@ function startSession(title, steps, onDone){
   const p=$("#player"); p.hidden=false;
   p.innerHTML=`<div class="pl-top"><button class="iconbtn" id="plClose" aria-label="Close">✕</button>
       <div class="ttl">${title}</div><div class="cnt" id="plCnt"></div></div>
-    <div class="pl-stage"><div class="pl-phase" id="plPhase"></div><div class="pl-time num" id="plTime"></div>
+    <div class="pl-stage"><div class="pl-name" id="plName" hidden></div><div class="pl-img" id="plImg" hidden></div>
+      <div class="pl-phase" id="plPhase"></div><div class="pl-time num" id="plTime"></div>
       <div class="pl-cue" id="plCue"></div><div class="pl-next" id="plNext"></div></div>
     <div class="pl-bar"><i id="plBar"></i></div>
     <div class="pl-controls"><button id="plPrev" aria-label="Previous">⏮</button>
@@ -957,9 +996,18 @@ function startSession(title, steps, onDone){
 }
 function elapsedBefore(i){let t=0;for(let j=0;j<i;j++)t+=session.steps[j].sec;return t;}
 function renderStep(){
-  const s=session.steps[session.idx];
-  $("#plPhase").textContent=s.phase; $("#plPhase").style.background=cssColor(s.color);
-  $("#plCue").textContent=s.cue||"";
+  const s=session.steps[session.idx], col=cssColor(s.color||"var(--accent)");
+  const phase=$("#plPhase"),name=$("#plName"),img=$("#plImg"),cue=$("#plCue");
+  if(s.img){
+    img.hidden=false; img.innerHTML=s.img; img.style.color=col;
+    name.hidden=false; cue.textContent="";
+    if(s.transition){ phase.textContent="Get ready"; phase.style.background=cssColor("var(--muted)");
+      name.textContent="Next · "+s.title; name.style.color=col; }
+    else { phase.textContent=s.sub||"Hold"; phase.style.background=col; name.textContent=s.title; name.style.color=""; }
+  } else {
+    img.hidden=true; name.hidden=true;
+    phase.textContent=s.phase; phase.style.background=col; cue.textContent=s.cue||"";
+  }
   const nx=session.steps[session.idx+1];
   $("#plNext").textContent=nx?("Up next · "+nx.title+" · "+mmss(nx.sec)):"Last one — finish strong";
   $("#plCnt").textContent=`${session.idx+1}/${session.steps.length}`;
@@ -1305,6 +1353,8 @@ function go(name){
   SCREENS.forEach(s=>$("#s-"+s).hidden=(s!==name));
   document.querySelectorAll("#nav button").forEach(b=>b.setAttribute("aria-current",b.dataset.s===name?"true":"false"));
   $("#gearBtn").setAttribute("aria-current",name==="settings"?"true":"false");
+  if(name==="workout"){ const r=todaysStrengthRec(); if(r){workoutEdit=r; loadEditState(r);} else workoutEdit=null; }
+  else workoutEdit=null;
   ({today:renderToday,weekly:renderWeekly,workout:renderWorkout,cardio:renderCardio,mobility:renderMobility,history:renderHistory,settings:renderSettings}[name])();
   if(name!=="workout") showRestBar(false);
   window.scrollTo(0,0);
