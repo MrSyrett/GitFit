@@ -513,7 +513,17 @@ const DEFAULTS={
   travel:{on:false,until:null}, restOverride:[], lightDays:[],
   goalWeight:null, stepTarget:8000, cardioTarget:3, cardioLevel:0, sleepTarget:8, waterTarget:8,
   program:"ss", exWeights:{},
+  trackers:{checkin:true, sleep:true, mobility:true, steps:true, water:true, treats:true, measurements:true},
 };
+const TRACKERS=[
+  {k:"checkin",name:"Morning check-in",desc:"Energy & soreness rating",icon:"🩺"},
+  {k:"sleep",name:"Sleep",desc:"Hours slept last night",icon:"😴"},
+  {k:"mobility",name:"Mobility",desc:"Coached stretch routine & streak",icon:"🧘"},
+  {k:"steps",name:"Steps",desc:"Daily step count",icon:"👟"},
+  {k:"water",name:"Water",desc:"Glasses per day",icon:"💧"},
+  {k:"treats",name:"Treats",desc:"Dessert tracker",icon:"🍰"},
+  {k:"measurements",name:"Measurements",desc:"Bodyweight & waist",icon:"⚖️"},
+];
 const KEY="gitfit_v1", OLD_KEY="ironledger_v1";
 let S=load(), done={}, setReps={}, timer=null, session=null, workoutEdit=null, editMode=false;
 
@@ -540,6 +550,8 @@ function normalize(p){
   s.sleepTarget=+s.sleepTarget||8; s.waterTarget=+s.waterTarget||8;
   if(s.program!=="ul")s.program="ss";
   if(typeof s.exWeights!=="object"||!s.exWeights||Array.isArray(s.exWeights))s.exWeights={};
+  if(typeof s.trackers!=="object"||!s.trackers||Array.isArray(s.trackers))s.trackers={};
+  TRACKERS.forEach(t=>{if(typeof s.trackers[t.k]!=="boolean")s.trackers[t.k]=true;});
   s.cardioLevel=Math.max(0,Math.min(CARDIO_PLAN.length-1,+s.cardioLevel||0));
   return s;
 }
@@ -656,9 +668,14 @@ function renderToday(){
   const sl0=sleepToday(), rec0=recToday();
   const isWorkout=isWorkoutSched(sched);
   const sessionDay = !travel && !recoveryDay && sched!=="rest";
+  const T=S.trackers;
   const status={};
   if(sessionDay){ if(sched==="cardio") status.cardio=cardioToday().length>0; else status.workout=workoutToday(); }
-  status.mobility=mobDoneToday(); status.steps=stepsOk; status.sleep=!!sl0; status.water=waterOk; status.recovery=!!(rec0&&rec0.energy);
+  if(T.mobility) status.mobility=mobDoneToday();
+  if(T.steps) status.steps=stepsOk;
+  if(T.sleep) status.sleep=!!sl0;
+  if(T.water) status.water=waterOk;
+  if(T.checkin) status.recovery=!!(rec0&&rec0.energy);
   const doneN=Object.values(status).filter(Boolean).length, totN=Object.keys(status).length, pct=Math.round(doneN/totN*100);
 
   const workoutDayName = S.program==="ul" && isWorkout ? PROGRAMS.ul.days[sched].name : (S.program==="ss"?"Strength day":"Workout");
@@ -674,6 +691,7 @@ function renderToday(){
   wrap.appendChild(sum);
 
   // 1. morning check-in
+  if(T.checkin){
   const rCard=el("div","card"); rCard.style.marginTop="12px";
   rCard.innerHTML=`<div class="sect-title" style="padding:12px 15px 2px">Morning check-in</div>
     <div class="set-group" style="padding-top:2px">
@@ -697,13 +715,16 @@ function renderToday(){
     const gl=$("#goLight"); if(gl) gl.onclick=()=>{S.lightDays.push(dayKey(Date.now()));save();renderToday();};
     $("#goRecover").onclick=()=>{S.restOverride.push(dayKey(Date.now()));save();renderToday();};
   }
+  }
 
   // 2. sleep
+  if(T.sleep){
   const slCard=el("div","card"); slCard.style.marginTop="12px";
   slCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Sleep last night</div><div class="big num">${sl0?fmt(sl0.hours):'—'}<small> h / ${fmt(S.sleepTarget)} h</small></div></div><div class="hi">😴</div></div>
     <div class="inlinelog"><input id="sleepIn" class="num" type="number" inputmode="decimal" placeholder="Hours slept" value="${sl0?fmt(sl0.hours):''}"><button id="sleepLog">Log</button></div>`;
   wrap.appendChild(slCard);
   $("#sleepLog").onclick=()=>{const v=parseFloat($("#sleepIn").value);if(isNaN(v)||v<0||v>24)return;const ex=sleepToday();if(ex)ex.hours=v;else S.sleep.push({date:Date.now(),hours:v});S.sleep.sort((a,b)=>a.date-b.date);save();renderToday();};
+  }
 
   // 3. session for the day
   if(travel){
@@ -746,14 +767,17 @@ function renderToday(){
   }
 
   // 4. mobility (daily)
+  if(T.mobility){
   const mc=el("div","card"); mc.style.marginTop="12px";
   const streak=mobStreak();
   const mBtn=el("button","hubcard");
   mBtn.innerHTML=`<div class="hi">🧘</div><div class="hb"><b>Mobility</b><span>${streak} day streak${streak?' 🔥':''}</span></div>
     <div class="hx">${status.mobility?'<span class="pill ok">Done</span>':'<span class="pill">Start</span>'}<span class="chev">›</span></div>`;
   mBtn.onclick=()=>go("mobility"); mc.appendChild(mBtn); wrap.appendChild(mc);
+  }
 
   // 5. steps
+  if(T.steps){
   const sc=Math.min(1,(ts0?ts0.count:0)/S.stepTarget);
   const sCard=el("div","card"); sCard.style.marginTop="12px";
   sCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Steps</div>
@@ -764,8 +788,10 @@ function renderToday(){
   $("#stepLog").onclick=()=>{const v=parseInt($("#stepIn").value,10);if(isNaN(v)||v<0)return;
     const ex=todaySteps(); if(ex)ex.count=v; else S.steps.push({date:Date.now(),count:v});
     S.steps.sort((a,b)=>a.date-b.date); save(); renderToday();};
+  }
 
   // 6. water
+  if(T.water){
   const wprog=Math.min(1,(wt0?wt0.count:0)/S.waterTarget);
   const waCard=el("div","card"); waCard.style.marginTop="12px";
   waCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Water</div><div class="big num">${wt0?wt0.count:0}<small> / ${S.waterTarget} glasses</small></div></div><div class="hi">💧</div></div>
@@ -774,8 +800,10 @@ function renderToday(){
   wrap.appendChild(waCard);
   const bumpWater=n=>{let e=waterToday();if(!e){e={date:Date.now(),count:0};S.water.push(e);}e.count=Math.max(0,e.count+n);save();renderToday();};
   $("#wPlus").onclick=()=>bumpWater(1); $("#wMinus").onclick=()=>bumpWater(-1);
+  }
 
   // 7. treats
+  if(T.treats){
   const dt=dessertToday(), dw=dessertWeek();
   const nCard=el("div","card"); nCard.style.marginTop="12px";
   nCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Treats</div><div class="big num">${dt?dt.count:0}<small> today · ${dw} this week</small></div></div><div class="hi">🍰</div></div>
@@ -783,8 +811,10 @@ function renderToday(){
   wrap.appendChild(nCard);
   const bumpDessert=n=>{let e=dessertToday();if(!e){e={date:Date.now(),count:0};S.dessert.push(e);}e.count=Math.max(0,e.count+n);save();renderToday();};
   $("#dPlus").onclick=()=>bumpDessert(1); $("#dMinus").onclick=()=>bumpDessert(-1);
+  }
 
   // 8. measurements (bodyweight + waist)
+  if(T.measurements){
   const last=S.bodyweight[S.bodyweight.length-1], lw=lastWaist();
   const mCard=el("div","card"); mCard.style.marginTop="12px";
   mCard.innerHTML=`<div class="bw-head"><div><div class="eyebrow">Bodyweight</div><div class="big num">${last?fmt(last.w):'—'}<small> ${U()}</small></div></div><div class="hi">⚖️</div></div>
@@ -797,6 +827,7 @@ function renderToday(){
     else S.bodyweight.push({date:Date.now(),w:v}); save(); renderToday();};
   $("#waistLog").onclick=()=>{const v=parseFloat($("#waistIn").value);if(isNaN(v))return;const x=lastWaist();
     if(x&&sameDay(x.date,Date.now()))x.value=v; else S.waist.push({date:Date.now(),value:v}); save(); renderToday();};
+  }
 }
 
 /* ================= WEEKLY ================= */
@@ -824,20 +855,22 @@ function renderWeekly(){
   const deWk=S.dessert.filter(e=>thisWeek(e.date)).reduce((a,e)=>a+e.count,0);
   const bwWk=S.bodyweight.filter(e=>thisWeek(e.date)); const bwChg=bwWk.length>=2?(bwWk[bwWk.length-1].w-bwWk[0].w):null;
 
+  const T=S.trackers;
   const tile=(k,v,unit,sub)=>`<div class="tile"><div class="k">${k}</div><div class="v num">${v}${unit?`<small> ${unit}</small>`:''}</div>${sub?`<div class="sub2">${sub}</div>`:''}</div>`;
   const tiles=el("div","tiles");
   tiles.innerHTML=
     tile("Strength",wWk,travel?"":`/ ${schedStrength}`,travel?"travel week":"sessions done")+
     tile("Cardio",cWk.length,travel?"":`/ ${S.cardioTarget}`,cMin+" min total")+
-    tile("Mobility",mobWk,"/ 7","days")+
-    tile("Avg sleep",slAvg!=null?fmt(Math.round(slAvg*10)/10):"—",slAvg!=null?"h":"", "goal "+fmt(S.sleepTarget)+" h")+
-    tile("Avg steps",stAvg!=null?stAvg.toLocaleString():"—","","goal "+S.stepTarget.toLocaleString())+
-    tile("Water/day",waAvg!=null?fmt(Math.round(waAvg*10)/10):"—","","goal "+S.waterTarget)+
-    tile("Treats",deWk,"","this week")+
-    tile("Weight",bwChg!=null?(bwChg>0?"+":"")+fmt(Math.round(bwChg*10)/10):"—",bwChg!=null?U():"","change this week");
+    (T.mobility?tile("Mobility",mobWk,"/ 7","days"):"")+
+    (T.sleep?tile("Avg sleep",slAvg!=null?fmt(Math.round(slAvg*10)/10):"—",slAvg!=null?"h":"", "goal "+fmt(S.sleepTarget)+" h"):"")+
+    (T.steps?tile("Avg steps",stAvg!=null?stAvg.toLocaleString():"—","","goal "+S.stepTarget.toLocaleString()):"")+
+    (T.water?tile("Water/day",waAvg!=null?fmt(Math.round(waAvg*10)/10):"—","","goal "+S.waterTarget):"")+
+    (T.treats?tile("Treats",deWk,"","this week"):"")+
+    (T.measurements?tile("Weight",bwChg!=null?(bwChg>0?"+":"")+fmt(Math.round(bwChg*10)/10):"—",bwChg!=null?U():"","change this week"):"");
   wrap.appendChild(tiles);
 
   // steps per day this week
+  if(T.steps){
   const stepsCard=el("div","card"); stepsCard.style.marginTop="12px";
   stepsCard.innerHTML=`<div class="sect-title" style="padding:12px 15px 2px">Steps by day</div>`;
   const maxSteps=Math.max(S.stepTarget,...days.map(t=>{const e=S.steps.find(x=>sameDay(x.date,t));return e?e.count:0}));
@@ -848,14 +881,17 @@ function renderWeekly(){
   bars+=`</div>`;
   stepsCard.insertAdjacentHTML("beforeend",bars);
   wrap.appendChild(stepsCard);
+  }
 
   // mobility week dots
+  if(T.mobility){
   const mobCard=el("div","card"); mobCard.style.marginTop="12px";
   const set=mobSet(); const dn2=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   let dots=`<div class="sect-title" style="padding:12px 15px 2px">Mobility days</div><div class="dots">`;
   days.forEach((t,i)=>{const dk=dayKey(t);dots+=`<b class="${set.has(dk)?'on':''} ${sameDay(t,Date.now())?'today':''}">${dn2[i]}</b>`;});
   dots+=`</div>`;
   mobCard.innerHTML=dots; wrap.appendChild(mobCard);
+  }
 }
 
 /* ================= WORKOUT ================= */
@@ -1397,6 +1433,17 @@ function renderSettings(){
     }).join("")+`</div>`;
   wrap.appendChild(pr);
   pr.querySelectorAll("[data-prog]").forEach(b=>b.onclick=()=>{S.program=b.dataset.prog;save();renderSettings();});
+
+  // trackers — show/hide the daily cards
+  const tk=el("div","card"); tk.style.marginTop="12px";
+  tk.innerHTML=`<div class="sect-title" style="padding-left:15px">Trackers</div>
+    <p class="note" style="padding:0 15px">Choose which habits show on Today and Weekly. Hiding one keeps its past data — it just drops off the daily list and the completion ring.</p>`;
+  const tg=el("div","set-group");
+  TRACKERS.forEach((t,i)=>{const f=el("div","field"); if(i===TRACKERS.length-1)f.style.borderBottom="0";
+    f.innerHTML=`<label>${t.icon} ${t.name}<small>${t.desc}</small></label><button class="switch" data-tk="${t.k}" aria-pressed="${!!S.trackers[t.k]}" aria-label="${t.name}"></button>`;
+    tg.appendChild(f);});
+  tk.appendChild(tg); wrap.appendChild(tk);
+  tk.querySelectorAll("[data-tk]").forEach(b=>b.onclick=()=>{S.trackers[b.dataset.tk]=!S.trackers[b.dataset.tk];save();b.setAttribute("aria-pressed",!!S.trackers[b.dataset.tk]);});
 
   if(S.program==="ss"){
   const ph=el("div","card"); ph.style.marginTop="12px";
