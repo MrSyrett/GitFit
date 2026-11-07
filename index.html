@@ -512,7 +512,7 @@ const DEFAULTS={
   schedule:["strength","cardio","strength","cardio","strength","cardio","rest"],
   travel:{on:false,until:null}, restOverride:[], lightDays:[],
   goalWeight:null, stepTarget:8000, cardioTarget:3, cardioLevel:0, sleepTarget:8, waterTarget:8,
-  program:"ss", exWeights:{},
+  program:"ss", exWeights:{}, soundCues:true,
   trackers:{checkin:true, sleep:true, mobility:true, steps:true, water:true, treats:true, measurements:true},
 };
 const TRACKERS=[
@@ -552,6 +552,7 @@ function normalize(p){
   if(typeof s.exWeights!=="object"||!s.exWeights||Array.isArray(s.exWeights))s.exWeights={};
   if(typeof s.trackers!=="object"||!s.trackers||Array.isArray(s.trackers))s.trackers={};
   TRACKERS.forEach(t=>{if(typeof s.trackers[t.k]!=="boolean")s.trackers[t.k]=true;});
+  if(typeof s.soundCues!=="boolean")s.soundCues=true;
   s.cardioLevel=Math.max(0,Math.min(CARDIO_PLAN.length-1,+s.cardioLevel||0));
   return s;
 }
@@ -1206,6 +1207,7 @@ function renderMobility(){
 
 /* ================= coached session player ================= */
 function startSession(title, steps, onDone){
+  unlockAudio();
   session={title,steps,idx:0,remain:steps[0].sec,paused:false,onDone,
     total:steps.reduce((a,s)=>a+s.sec,0)};
   const p=$("#player"); p.hidden=false;
@@ -1221,12 +1223,14 @@ function startSession(title, steps, onDone){
   $("#plClose").onclick=endSession;
   $("#plPrev").onclick=()=>jump(-1);
   $("#plSkip").onclick=()=>jump(1);
-  $("#plPlay").onclick=()=>{session.paused=!session.paused;$("#plPlay").textContent=session.paused?"▶":"⏸";};
+  $("#plPlay").onclick=()=>{session.paused=!session.paused;if(!session.paused)unlockAudio();$("#plPlay").textContent=session.paused?"▶":"⏸";};
   renderStep();
   clearInterval(session.iv);
   session.iv=setInterval(()=>{ if(!session||session.paused)return;
     session.remain--; updateTime();
-    if(session.remain<=0){ cue(session.steps[session.idx]); advance(); }
+    const nx=session.steps[session.idx+1];
+    if(session.remain<=0){ if(nx) cue(nx); advance(); }
+    else if(session.remain<=3 && nx && !nx.transition){ tick(); }
   },1000);
   if("wakeLock" in navigator){ navigator.wakeLock.request("screen").then(l=>session.wake=l).catch(()=>{}); }
 }
@@ -1415,12 +1419,14 @@ function renderSettings(){
   // appearance / theme
   const ap=el("div","card");
   const th=currentTheme();
-  ap.innerHTML=`<div class="sect-title" style="padding-left:15px">Appearance</div><div class="set-group">
-      <div class="field" style="border-bottom:0"><label>Theme<small>System follows your device's light/dark setting</small></label>
+  ap.innerHTML=`<div class="sect-title" style="padding-left:15px">Appearance &amp; sound</div><div class="set-group">
+      <div class="field"><label>Theme<small>System follows your device's light/dark setting</small></label>
       <div class="segsm" id="themeSeg"><button data-t="light" aria-pressed="${th==='light'}">Light</button><button data-t="dark" aria-pressed="${th==='dark'}">Dark</button><button data-t="system" aria-pressed="${th==='system'}">System</button></div></div>
+      <div class="field" style="border-bottom:0"><label>🔔 Timer sounds<small>Beeps &amp; buzz on rest, cardio and pose transitions, with a 3-2-1 countdown</small></label><button class="switch" id="soundTog" aria-pressed="${!!S.soundCues}" aria-label="Timer sounds"></button></div>
     </div>`;
   wrap.appendChild(ap);
   ap.querySelectorAll("#themeSeg button").forEach(b=>b.onclick=()=>{setTheme(b.dataset.t);renderSettings();});
+  $("#soundTog").onclick=()=>{S.soundCues=!S.soundCues;save();$("#soundTog").setAttribute("aria-pressed",!!S.soundCues);if(S.soundCues){unlockAudio();cue({img:true});}};
 
   // program selector
   const pr=el("div","card"); pr.style.marginTop="12px";
@@ -1607,17 +1613,32 @@ function renderRestHub(){
   }
 }
 function startRest(sec){
-  clearTimer(); timer={remain:sec}; renderRestHub();
+  unlockAudio(); clearTimer(); timer={remain:sec}; renderRestHub();
   timer.iv=setInterval(()=>{ if(!timer)return; timer.remain--;
-    if(timer.remain<=0){ clearTimer(); renderRestHub(); doneBeep(); } else renderRestHub(); },1000);
+    if(timer.remain<=0){ clearTimer(); renderRestHub(); doneBeep(); }
+    else { if(timer.remain<=3) tick(); renderRestHub(); } },1000);
 }
 function stopRest(){ clearTimer(); renderRestHub(); }
-function tone(f,t0,d,vol){try{const ac=tone.ac||(tone.ac=new (window.AudioContext||window.webkitAudioContext)());
+function unlockAudio(){ try{ const ac=tone.ac||(tone.ac=new (window.AudioContext||window.webkitAudioContext)());
+  if(ac.state==="suspended") ac.resume();
+  const o=ac.createOscillator(),g=ac.createGain(); g.gain.value=0.00001; o.connect(g); g.connect(ac.destination);
+  o.start(); o.stop(ac.currentTime+0.02); }catch(e){} }
+function tone(f,t0,d,vol){ if(S.soundCues===false)return; try{const ac=tone.ac||(tone.ac=new (window.AudioContext||window.webkitAudioContext)());
+  if(ac.state==="suspended") ac.resume();
   const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.connect(g);g.connect(ac.destination);
   g.gain.setValueAtTime(0.0001,ac.currentTime+t0);g.gain.exponentialRampToValueAtTime(vol||0.25,ac.currentTime+t0+0.02);
   g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+t0+d);o.start(ac.currentTime+t0);o.stop(ac.currentTime+t0+d);}catch(e){}}
-function cue(){tone(760,0,.16);tone(1040,.14,.2);if(navigator.vibrate)navigator.vibrate(90);}
-function doneBeep(){tone(880,0,.18);tone(1175,.2,.22);tone(1568,.42,.26);if(navigator.vibrate)navigator.vibrate([120,60,120]);}
+function buzz(p){ if(S.soundCues===false)return; if(navigator.vibrate)try{navigator.vibrate(p);}catch(e){} }
+function tick(){ tone(1500,0,.05,.12); }  // soft countdown blip
+/* cue plays as the NEXT step begins, with a flavor you can tell apart without looking */
+function cue(next){
+  if(next&&next.phase==="run"){ tone(900,0,.12);tone(1360,.1,.22); buzz([70,40,140]); }           // go! — run
+  else if(next&&(next.phase==="walk"||next.phase==="cooldown"||next.phase==="warmup")){ tone(560,0,.24,.22); buzz(110); } // ease — walk
+  else if(next&&next.transition){ tone(680,0,.16,.2); buzz(60); }                                  // get ready for next pose
+  else if(next&&next.img){ tone(780,0,.13);tone(1040,.12,.2); buzz(80); }                           // pose hold begins
+  else { tone(760,0,.16);tone(1040,.14,.2); buzz(90); }                                             // generic transition
+}
+function doneBeep(){tone(880,0,.18);tone(1175,.2,.22);tone(1568,.42,.26);buzz([120,60,120]);}
 
 /* ================= nav ================= */
 const SCREENS=["today","weekly","workout","cardio","mobility","history","settings"];
